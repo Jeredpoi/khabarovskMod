@@ -22,6 +22,7 @@
 После создания репозитория GitHub покажет вам URL репозитория. Выполните следующие команды:
 
 **Если ваш GitHub username - Jeredpoi:**
+
 ```bash
 cd "c:\Users\B-ZONE\Documents\Visual Studio\another_Projects"
 git remote add origin https://github.com/Jeredpoi/khabarovskMod.git
@@ -39,6 +40,7 @@ git push -u origin main
 ```
 
 **Или используйте SSH (если настроен):**
+
 ```bash
 git remote add origin git@github.com:YOUR_USERNAME/khabarovskMod.git
 git branch -M main
@@ -50,6 +52,7 @@ git push -u origin main
 После создания репозитория обновите ссылки в файле `khabarovskMod.plugin.js`:
 
 Замените:
+
 - `https://github.com/Jeredpoi/khabarovskMod` → на ваш реальный URL
 - `https://github.com/Jeredpoi/khabarovskMod/blob/main/khabarovskMod.plugin.js` → на ваш реальный URL
 
@@ -64,6 +67,7 @@ git push
 ## 🔄 Дальнейшая работа с репозиторием
 
 ### Добавление изменений:
+
 ```bash
 git add .
 git commit -m "Описание изменений"
@@ -71,11 +75,13 @@ git push
 ```
 
 ### Проверка статуса:
+
 ```bash
 git status
 ```
 
 ### Просмотр истории:
+
 ```bash
 git log
 ```
