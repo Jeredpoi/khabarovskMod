@@ -4,7 +4,7 @@
  * @version 0.0.1
  * @description Плагин модерации для Khabarovsk Discord сервера через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4
  * @website https://github.com/Jeredpoi/khabarovskMod
- * @source https://github.com/Jeredpoi/khabarovskMod/blob/main/khabarovskMod.plugin.js
+ * @source https://github.com/Jeredpoi/khabarovskMod/raw/main/khabarovskMod.plugin.js
  */
 
 module.exports = (() => {
