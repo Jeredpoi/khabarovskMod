@@ -1,8 +1,8 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 0.0.1
- * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4
+ * @version 0.0.3
+ * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://github.com/Jeredpoi/khabarovskMod/raw/main/khabarovskMod.plugin.js
  */
@@ -12,10 +12,15 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "2.4.1",
-            description: "Плагин модерации для khabarovskMod"
+            version: "2.5.0",
+            description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
+            {
+                title: "Новые функции",
+                type: "added",
+                items: ["Добавлены инструменты модерации: /user и /punish в подменю 'Модерация'"]
+            },
             {
                 title: "Исправления",
                 type: "fixed",
@@ -117,7 +122,9 @@ module.exports = (() => {
                             warn: "/warn user:<@{userId}> reason:{ruleId}",
                             mute: "/mute user:<@{userId}> time:90 reason:{ruleId}",
                             ban: "/ban user:<@{userId}> time: reason:{ruleId}",
-                            permban: "/ban user:<@{userId}> time:365 reason:{ruleId}"
+                            permban: "/ban user:<@{userId}> time:365 reason:{ruleId}",
+                            user: "/user user:<@{userId}>",
+                            punish: "/punish user:<@{userId}>"
                         },
                         onlyMention: "<@{userId}>"
                     },
@@ -219,11 +226,59 @@ module.exports = (() => {
                                 };
                             });
 
+                            // Добавляем инструменты модерации
+                            const toolsMenuItem = {
+                                type: "submenu",
+                                label: "🔧 Инструменты модерации",
+                                id: "khabarovsk-moderation-tools",
+                                items: [
+                                    {
+                                        type: "item",
+                                        label: "Проверка пользователя",
+                                        id: "khabarovsk-tool-user",
+                                        action: () => {
+                                            // Используем формат команды из настроек, как для других команд (строка 430)
+                                            if (!this.settings.messageFormats?.commands?.user) {
+                                                BdApi.UI.showToast("Формат команды /user не найден в настройках", {type: "error"});
+                                                return;
+                                            }
+
+                                            const commandContent = this.settings.messageFormats.commands.user
+                                                .replace("{userId}", user.id);
+
+                                            // Копируем команду в буфер, как в основном плагине (строка 456)
+                                            this.insertTextIntoChat(commandContent);
+                                        }
+                                    },
+                                    {
+                                        type: "item",
+                                        label: "Punish",
+                                        id: "khabarovsk-tool-punish",
+                                        action: () => {
+                                            // Используем формат команды из настроек, как для других команд (строка 430)
+                                            if (!this.settings.messageFormats?.commands?.punish) {
+                                                BdApi.UI.showToast("Формат команды /punish не найден в настройках", {type: "error"});
+                                                return;
+                                            }
+
+                                            const commandContent = this.settings.messageFormats.commands.punish
+                                                .replace("{userId}", user.id);
+
+                                            // Копируем команду в буфер, как в основном плагине (строка 456)
+                                            this.insertTextIntoChat(commandContent);
+                                        }
+                                    }
+                                ]
+                            };
+
+                            // Объединяем категории правил и инструменты
+                            const allItems = [...categoryItems, toolsMenuItem];
+
                             const moderationMenuItem = BdApi.ContextMenu.buildItem({
                                 type: "submenu",
                                 label: "Модерация",
                                 id: "khabarovsk-moderation-main",
-                                items: categoryItems
+                                items: allItems
                             });
 
                             children.push(moderationMenuItem);
