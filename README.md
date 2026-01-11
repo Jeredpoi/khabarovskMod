@@ -1,4 +1,4 @@
-# khabarovskMod - BetterDiscord Plugin
+# khabarovskMod - BetterDiscord Plugin:
 
 Плагин модерации для Discord сервера Хабаровск через контекстное меню пользователя в BetterDiscord.
 
