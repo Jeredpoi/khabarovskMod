@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 0.0.4
+ * @version 0.0.5
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://github.com/Jeredpoi/khabarovskMod/raw/main/khabarovskMod.plugin.js
@@ -12,7 +12,7 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "2.5.1",
+            version: "2.5.2",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
@@ -22,7 +22,9 @@ module.exports = (() => {
                 items: [
                     "Исправлено глубокое объединение настроек (команды теперь не теряются при загрузке конфига)",
                     "Добавлена проверка на null для MessageActions перед отправкой сообщений",
-                    "Добавлена инициализация массивов наказаний для предотвращения ошибок"
+                    "Добавлена инициализация массивов наказаний для предотвращения ошибок",
+                    "Добавлены проверки наличия команд перед использованием в executePunishment",
+                    "Исправлена утечка памяти при копировании в буфер обмена (добавлен finally блок)"
                 ]
             },
             {
@@ -390,6 +392,11 @@ module.exports = (() => {
                         const withText = input1.value;
                         const punishmentsText = input2.value;
 
+                        // Убеждаемся, что структура настроек существует
+                        if (!this.settings.messageFormats) {
+                            this.settings.messageFormats = {};
+                        }
+
                         this.settings.messageFormats.withText = withText;
                         this.settings.punishmentsWithText = punishmentsText.split(",").map(s => s.trim()).filter(s => s);
 
@@ -495,6 +502,12 @@ module.exports = (() => {
                         const channelId = this.getCurrentChannelId();
                         if (!channelId) return;
 
+                        // Проверяем наличие команды warn
+                        if (!this.settings.messageFormats?.commands?.warn) {
+                            BdApi.UI.showToast("Формат команды /warn не найден в настройках", {type: "error"});
+                            return;
+                        }
+
                         // Предупреждения - отправляем автоматически
                         messageContent = this.settings.messageFormats.withText
                             .replace("{userId}", user.id)
@@ -512,15 +525,28 @@ module.exports = (() => {
 
                         BdApi.UI.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, {type: "success"});
                     } else if (this.settings.punishmentsWithCopy.includes(punishment)) {
+                        // Проверяем наличие команд перед использованием
                         if (punishment === "Мут 90 минут") {
+                            if (!this.settings.messageFormats?.commands?.mute) {
+                                BdApi.UI.showToast("Формат команды /mute не найден в настройках", {type: "error"});
+                                return;
+                            }
                             commandContent = this.settings.messageFormats.commands.mute
                                 .replace("{userId}", user.id)
                                 .replace("{ruleId}", ruleId);
                         } else if (punishment === "Бан 7-15 дней") {
+                            if (!this.settings.messageFormats?.commands?.ban) {
+                                BdApi.UI.showToast("Формат команды /ban не найден в настройках", {type: "error"});
+                                return;
+                            }
                             commandContent = this.settings.messageFormats.commands.ban
                                 .replace("{userId}", user.id)
                                 .replace("{ruleId}", ruleId);
                         } else if (punishment === "Перманентная блокировка") {
+                            if (!this.settings.messageFormats?.commands?.permban) {
+                                BdApi.UI.showToast("Формат команды /permban не найден в настройках", {type: "error"});
+                                return;
+                            }
                             commandContent = this.settings.messageFormats.commands.permban
                                 .replace("{userId}", user.id)
                                 .replace("{ruleId}", ruleId);
@@ -566,9 +592,12 @@ module.exports = (() => {
                             BdApi.UI.showToast(`Скопировано в буфер: "${text}". Нажмите Ctrl+V в чате.`, {type: "info", timeout: 5000});
                         } catch (e) {
                             BdApi.UI.showToast("Не удалось скопировать текст", {type: "error"});
+                        } finally {
+                            // Удаляем textArea в любом случае
+                            if (textArea.parentNode) {
+                                document.body.removeChild(textArea);
+                            }
                         }
-
-                        document.body.removeChild(textArea);
                     });
 
                 } catch (error) {
