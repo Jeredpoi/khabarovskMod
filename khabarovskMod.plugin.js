@@ -4,7 +4,7 @@
  * @version 0.0.6
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
- * @source https://github.com/Jeredpoi/khabarovskMod/raw/main/khabarovskMod.plugin.js
+ * @source https://github.com/Jeredpoi/khabarovskMod
  */
 
 module.exports = (() => {
@@ -408,7 +408,7 @@ module.exports = (() => {
 
                 // Секция: Форматы сообщений
                 const formatsSection = createSection("Форматы сообщений", "💬");
-                
+
                 const withTextField = createInputField(
                     "Формат для автоотправки сообщений:",
                     this.settings.messageFormats?.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил",
@@ -427,7 +427,7 @@ module.exports = (() => {
 
                 // Секция: Форматы команд
                 const commandsSection = createSection("Форматы команд", "⚡");
-                
+
                 const warnField = createInputField(
                     "Команда /warn:",
                     this.settings.messageFormats?.commands?.warn || "/warn user:<@{userId}> reason:{ruleId}",
@@ -474,7 +474,7 @@ module.exports = (() => {
 
                 // Секция: Категории наказаний
                 const punishmentsSection = createSection("Категории наказаний", "⚖️");
-                
+
                 const withTextField2 = createInputField(
                     "Наказания с автоотправкой (через запятую):",
                     (this.settings.punishmentsWithText || ["Устное предупреждение"]).join(", "),
