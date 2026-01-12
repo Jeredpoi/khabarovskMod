@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 0.0.5
+ * @version 0.0.6
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://github.com/Jeredpoi/khabarovskMod/raw/main/khabarovskMod.plugin.js
@@ -12,10 +12,21 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "0.0.5",
+            version: "0.0.6",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
+            {
+                title: "Новые функции",
+                type: "added",
+                items: [
+                    "Полностью переработана панель настроек с улучшенным визуальным дизайном",
+                    "Добавлена настройка всех форматов команд (/warn, /mute, /ban, /permban, /user, /punish)",
+                    "Добавлена настройка всех категорий наказаний (с автоотправкой, с копированием и т.д.)",
+                    "Добавлена кнопка сброса настроек к умолчаниям",
+                    "Улучшен интерфейс с секциями, иконками и подсказками"
+                ]
+            },
             {
                 title: "Исправления",
                 type: "fixed",
@@ -24,13 +35,9 @@ module.exports = (() => {
                     "Добавлена проверка на null для MessageActions перед отправкой сообщений",
                     "Добавлена инициализация массивов наказаний для предотвращения ошибок",
                     "Добавлены проверки наличия команд перед использованием в executePunishment",
-                    "Исправлена утечка памяти при копировании в буфер обмена (добавлен finally блок)"
+                    "Исправлена утечка памяти при копировании в буфер обмена (добавлен finally блок)",
+                    "Синхронизированы версии @version и config.info.version"
                 ]
-            },
-            {
-                title: "Новые функции",
-                type: "added",
-                items: ["Добавлены инструменты модерации: /user и /punish в подменю 'Модерация'"]
             }
         ]
     };
@@ -321,116 +328,285 @@ module.exports = (() => {
 
                 const panel = document.createElement("div");
                 panel.style.padding = "20px";
+                panel.style.maxWidth = "800px";
+                panel.style.margin = "0 auto";
 
+                // Заголовок
                 const title = document.createElement("h2");
-                title.textContent = "Настройки khabarovskMod";
-                title.style.marginBottom = "15px";
+                title.textContent = "⚙️ Настройки khabarovskMod";
+                title.style.marginBottom = "20px";
+                title.style.color = "#FFFFFF";
+                title.style.fontSize = "24px";
+                title.style.fontWeight = "600";
                 panel.appendChild(title);
 
-                // Формат с текстом
-                const label1 = document.createElement("label");
-                label1.textContent = "Формат для предупреждений (автоотправка):";
-                label1.style.display = "block";
-                label1.style.marginBottom = "5px";
-                label1.style.fontWeight = "bold";
-                panel.appendChild(label1);
+                // Функция создания секции
+                const createSection = (titleText, icon = "📋") => {
+                    const section = document.createElement("div");
+                    section.style.marginBottom = "30px";
+                    section.style.padding = "15px";
+                    section.style.backgroundColor = "rgba(79, 84, 92, 0.3)";
+                    section.style.borderRadius = "8px";
+                    section.style.border = "1px solid rgba(79, 84, 92, 0.5)";
 
-                const input1 = document.createElement("input");
-                input1.type = "text";
-                input1.id = "withText";
-                input1.value = this.settings.messageFormats.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил";
-                input1.style.width = "100%";
-                input1.style.padding = "8px";
-                input1.style.marginBottom = "5px";
-                panel.appendChild(input1);
+                    const sectionTitle = document.createElement("h3");
+                    sectionTitle.textContent = `${icon} ${titleText}`;
+                    sectionTitle.style.margin = "0 0 15px 0";
+                    sectionTitle.style.color = "#FFFFFF";
+                    sectionTitle.style.fontSize = "18px";
+                    sectionTitle.style.fontWeight = "600";
+                    section.appendChild(sectionTitle);
 
-                const hint1 = document.createElement("small");
-                hint1.textContent = "Доступные переменные: {userId}, {punishment}, {ruleId}";
-                hint1.style.display = "block";
-                hint1.style.marginBottom = "15px";
-                hint1.style.opacity = "0.7";
-                panel.appendChild(hint1);
+                    return section;
+                };
 
-                // Список наказаний с автоотправкой
-                const label2 = document.createElement("label");
-                label2.textContent = "Наказания с автоотправкой (через запятую):";
-                label2.style.display = "block";
-                label2.style.marginBottom = "5px";
-                label2.style.fontWeight = "bold";
-                panel.appendChild(label2);
+                // Функция создания поля ввода
+                const createInputField = (labelText, value, hintText, placeholder = "") => {
+                    const container = document.createElement("div");
+                    container.style.marginBottom = "20px";
 
-                const input2 = document.createElement("input");
-                input2.type = "text";
-                input2.id = "punishmentsWithText";
-                input2.value = (this.settings.punishmentsWithText || ["Устное предупреждение", "Предупреждение"]).join(", ");
-                input2.style.width = "100%";
-                input2.style.padding = "8px";
-                input2.style.marginBottom = "5px";
-                panel.appendChild(input2);
+                    const label = document.createElement("label");
+                    label.textContent = labelText;
+                    label.style.display = "block";
+                    label.style.marginBottom = "8px";
+                    label.style.color = "#B9BBBE";
+                    label.style.fontSize = "14px";
+                    label.style.fontWeight = "500";
+                    container.appendChild(label);
 
-                const hint2 = document.createElement("small");
-                hint2.textContent = "Остальные наказания будут копировать только упоминание пользователя";
-                hint2.style.display = "block";
-                hint2.style.marginBottom = "20px";
-                hint2.style.opacity = "0.7";
-                panel.appendChild(hint2);
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.value = value || "";
+                    input.placeholder = placeholder;
+                    input.style.width = "100%";
+                    input.style.padding = "10px 12px";
+                    input.style.marginBottom = "6px";
+                    input.style.backgroundColor = "rgba(4, 4, 5, 0.3)";
+                    input.style.border = "1px solid rgba(79, 84, 92, 0.5)";
+                    input.style.borderRadius = "4px";
+                    input.style.color = "#FFFFFF";
+                    input.style.fontSize = "14px";
+                    input.style.boxSizing = "border-box";
+                    input.style.transition = "border-color 0.2s";
+                    input.onfocus = () => input.style.borderColor = "#5865F2";
+                    input.onblur = () => input.style.borderColor = "rgba(79, 84, 92, 0.5)";
+                    container.appendChild(input);
 
-                // Кнопка сохранения
+                    if (hintText) {
+                        const hint = document.createElement("small");
+                        hint.textContent = hintText;
+                        hint.style.display = "block";
+                        hint.style.marginTop = "4px";
+                        hint.style.color = "#72767D";
+                        hint.style.fontSize = "12px";
+                        hint.style.lineHeight = "1.4";
+                        container.appendChild(hint);
+                    }
+
+                    return { container, input };
+                };
+
+                // Секция: Форматы сообщений
+                const formatsSection = createSection("Форматы сообщений", "💬");
+                
+                const withTextField = createInputField(
+                    "Формат для автоотправки сообщений:",
+                    this.settings.messageFormats?.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил",
+                    "Доступные переменные: {userId}, {punishment}, {ruleId}"
+                );
+                formatsSection.appendChild(withTextField.container);
+
+                const onlyMentionField = createInputField(
+                    "Формат только упоминания:",
+                    this.settings.messageFormats?.onlyMention || "<@{userId}>",
+                    "Используется для наказаний без автоотправки"
+                );
+                formatsSection.appendChild(onlyMentionField.container);
+
+                panel.appendChild(formatsSection);
+
+                // Секция: Форматы команд
+                const commandsSection = createSection("Форматы команд", "⚡");
+                
+                const warnField = createInputField(
+                    "Команда /warn:",
+                    this.settings.messageFormats?.commands?.warn || "/warn user:<@{userId}> reason:{ruleId}",
+                    "Используется для наказания 'Предупреждение'"
+                );
+                commandsSection.appendChild(warnField.container);
+
+                const muteField = createInputField(
+                    "Команда /mute:",
+                    this.settings.messageFormats?.commands?.mute || "/mute user:<@{userId}> time:90 reason:{ruleId}",
+                    "Используется для наказания 'Мут 90 минут'"
+                );
+                commandsSection.appendChild(muteField.container);
+
+                const banField = createInputField(
+                    "Команда /ban:",
+                    this.settings.messageFormats?.commands?.ban || "/ban user:<@{userId}> time: reason:{ruleId}",
+                    "Используется для наказания 'Бан 7-15 дней'"
+                );
+                commandsSection.appendChild(banField.container);
+
+                const permbanField = createInputField(
+                    "Команда /ban (перманент):",
+                    this.settings.messageFormats?.commands?.permban || "/ban user:<@{userId}> time:365 reason:{ruleId}",
+                    "Используется для наказания 'Перманентная блокировка'"
+                );
+                commandsSection.appendChild(permbanField.container);
+
+                const userField = createInputField(
+                    "Команда /user:",
+                    this.settings.messageFormats?.commands?.user || "/user user:<@{userId}>",
+                    "Используется в инструментах модерации"
+                );
+                commandsSection.appendChild(userField.container);
+
+                const punishField = createInputField(
+                    "Команда /punish:",
+                    this.settings.messageFormats?.commands?.punish || "/punish user:<@{userId}>",
+                    "Используется в инструментах модерации"
+                );
+                commandsSection.appendChild(punishField.container);
+
+                panel.appendChild(commandsSection);
+
+                // Секция: Категории наказаний
+                const punishmentsSection = createSection("Категории наказаний", "⚖️");
+                
+                const withTextField2 = createInputField(
+                    "Наказания с автоотправкой (через запятую):",
+                    (this.settings.punishmentsWithText || ["Устное предупреждение"]).join(", "),
+                    "Эти наказания отправляют сообщение автоматически в чат"
+                );
+                punishmentsSection.appendChild(withTextField2.container);
+
+                const withTextAndCopyField = createInputField(
+                    "Наказания с автоотправкой + копированием команды (через запятую):",
+                    (this.settings.punishmentsWithTextAndCopy || ["Предупреждение"]).join(", "),
+                    "Эти наказания отправляют сообщение И копируют команду в буфер обмена"
+                );
+                punishmentsSection.appendChild(withTextAndCopyField.container);
+
+                const withCopyField = createInputField(
+                    "Наказания только с копированием команды (через запятую):",
+                    (this.settings.punishmentsWithCopy || ["Мут 90 минут", "Бан 7-15 дней", "Перманентная блокировка"]).join(", "),
+                    "Эти наказания только копируют команду в буфер обмена"
+                );
+                punishmentsSection.appendChild(withCopyField.container);
+
+                panel.appendChild(punishmentsSection);
+
+                // Кнопки действий
+                const buttonsContainer = document.createElement("div");
+                buttonsContainer.style.display = "flex";
+                buttonsContainer.style.gap = "10px";
+                buttonsContainer.style.marginTop = "30px";
+                buttonsContainer.style.paddingTop = "20px";
+                buttonsContainer.style.borderTop = "1px solid rgba(79, 84, 92, 0.5)";
+
                 const saveButton = document.createElement("button");
-                saveButton.textContent = "Сохранить настройки";
-                saveButton.style.padding = "10px 20px";
+                saveButton.textContent = "💾 Сохранить настройки";
+                saveButton.style.padding = "12px 24px";
                 saveButton.style.background = "#5865F2";
                 saveButton.style.color = "white";
                 saveButton.style.border = "none";
-                saveButton.style.borderRadius = "3px";
+                saveButton.style.borderRadius = "6px";
                 saveButton.style.cursor = "pointer";
-                saveButton.style.fontWeight = "bold";
-                saveButton.style.marginRight = "10px";
+                saveButton.style.fontWeight = "600";
+                saveButton.style.fontSize = "14px";
+                saveButton.style.transition = "background 0.2s";
+                saveButton.onmouseenter = () => saveButton.style.background = "#4752C4";
+                saveButton.onmouseleave = () => saveButton.style.background = "#5865F2";
 
                 saveButton.onclick = () => {
                     try {
-                        const withText = input1.value;
-                        const punishmentsText = input2.value;
-
                         // Убеждаемся, что структура настроек существует
                         if (!this.settings.messageFormats) {
                             this.settings.messageFormats = {};
                         }
+                        if (!this.settings.messageFormats.commands) {
+                            this.settings.messageFormats.commands = {};
+                        }
 
-                        this.settings.messageFormats.withText = withText;
-                        this.settings.punishmentsWithText = punishmentsText.split(",").map(s => s.trim()).filter(s => s);
+                        // Сохраняем форматы сообщений
+                        this.settings.messageFormats.withText = withTextField.input.value.trim();
+                        this.settings.messageFormats.onlyMention = onlyMentionField.input.value.trim();
+
+                        // Сохраняем команды
+                        this.settings.messageFormats.commands.warn = warnField.input.value.trim();
+                        this.settings.messageFormats.commands.mute = muteField.input.value.trim();
+                        this.settings.messageFormats.commands.ban = banField.input.value.trim();
+                        this.settings.messageFormats.commands.permban = permbanField.input.value.trim();
+                        this.settings.messageFormats.commands.user = userField.input.value.trim();
+                        this.settings.messageFormats.commands.punish = punishField.input.value.trim();
+
+                        // Сохраняем категории наказаний
+                        this.settings.punishmentsWithText = withTextField2.input.value.split(",").map(s => s.trim()).filter(s => s);
+                        this.settings.punishmentsWithTextAndCopy = withTextAndCopyField.input.value.split(",").map(s => s.trim()).filter(s => s);
+                        this.settings.punishmentsWithCopy = withCopyField.input.value.split(",").map(s => s.trim()).filter(s => s);
 
                         this.saveSettings(this.settings);
-                        BdApi.UI.showToast("Настройки сохранены!", {type: "success"});
+                        BdApi.UI.showToast("✅ Настройки успешно сохранены!", {type: "success"});
                     } catch (error) {
                         console.error("Ошибка сохранения настроек:", error);
-                        BdApi.UI.showToast("Ошибка сохранения: " + error.message, {type: "error"});
+                        BdApi.UI.showToast("❌ Ошибка сохранения: " + error.message, {type: "error"});
                     }
                 };
 
-                panel.appendChild(saveButton);
+                const resetButton = document.createElement("button");
+                resetButton.textContent = "🔄 Сбросить к умолчаниям";
+                resetButton.style.padding = "12px 24px";
+                resetButton.style.background = "#4E5058";
+                resetButton.style.color = "white";
+                resetButton.style.border = "none";
+                resetButton.style.borderRadius = "6px";
+                resetButton.style.cursor = "pointer";
+                resetButton.style.fontWeight = "600";
+                resetButton.style.fontSize = "14px";
+                resetButton.style.transition = "background 0.2s";
+                resetButton.onmouseenter = () => resetButton.style.background = "#5D5F66";
+                resetButton.onmouseleave = () => resetButton.style.background = "#4E5058";
 
-                // Кнопка открытия конфига
+                resetButton.onclick = () => {
+                    if (confirm("Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?")) {
+                        this.settings = this.loadSettings();
+                        // Перезагружаем панель
+                        const newPanel = this.getSettingsPanel();
+                        panel.parentNode.replaceChild(newPanel, panel);
+                        BdApi.UI.showToast("⚙️ Настройки сброшены к умолчаниям", {type: "info"});
+                    }
+                };
+
                 const openButton = document.createElement("button");
-                openButton.textContent = "Открыть конфиг-файл";
-                openButton.style.padding = "10px 20px";
+                openButton.textContent = "📂 Открыть конфиг-файл";
+                openButton.style.padding = "12px 24px";
                 openButton.style.background = "#4E5058";
                 openButton.style.color = "white";
                 openButton.style.border = "none";
-                openButton.style.borderRadius = "3px";
+                openButton.style.borderRadius = "6px";
                 openButton.style.cursor = "pointer";
+                openButton.style.fontWeight = "600";
+                openButton.style.fontSize = "14px";
+                openButton.style.transition = "background 0.2s";
+                openButton.onmouseenter = () => openButton.style.background = "#5D5F66";
+                openButton.onmouseleave = () => openButton.style.background = "#4E5058";
 
                 openButton.onclick = () => {
                     try {
                         require("electron").shell.openPath(this.configPath);
-                        BdApi.UI.showToast("Открываю конфиг-файл...", {type: "info"});
+                        BdApi.UI.showToast("📂 Открываю конфиг-файл...", {type: "info"});
                     } catch (error) {
                         console.error("Ошибка открытия файла:", error);
-                        BdApi.UI.showToast("Ошибка открытия файла: " + error.message, {type: "error"});
+                        BdApi.UI.showToast("❌ Ошибка открытия файла: " + error.message, {type: "error"});
                     }
                 };
 
-                panel.appendChild(openButton);
+                buttonsContainer.appendChild(saveButton);
+                buttonsContainer.appendChild(resetButton);
+                buttonsContainer.appendChild(openButton);
+                panel.appendChild(buttonsContainer);
 
                 return panel;
             }
