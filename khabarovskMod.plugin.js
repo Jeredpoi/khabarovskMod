@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 0.0.3
+ * @version 0.0.4
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://github.com/Jeredpoi/khabarovskMod/raw/main/khabarovskMod.plugin.js
@@ -12,19 +12,23 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "2.5.0",
+            version: "2.5.1",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
             {
+                title: "Исправления",
+                type: "fixed",
+                items: [
+                    "Исправлено глубокое объединение настроек (команды теперь не теряются при загрузке конфига)",
+                    "Добавлена проверка на null для MessageActions перед отправкой сообщений",
+                    "Добавлена инициализация массивов наказаний для предотвращения ошибок"
+                ]
+            },
+            {
                 title: "Новые функции",
                 type: "added",
                 items: ["Добавлены инструменты модерации: /user и /punish в подменю 'Модерация'"]
-            },
-            {
-                title: "Исправления",
-                type: "fixed",
-                items: ["Добавлена панель настроек"]
             }
         ]
     };
@@ -138,10 +142,15 @@ module.exports = (() => {
                         const data = fs.readFileSync(this.configPath, "utf8");
                         const loadedSettings = JSON.parse(data);
                         // Объединяем с дефолтными настройками на случай если чего-то не хватает
+                        // Глубокое объединение для messageFormats, чтобы commands не терялись
                         return {
                             messageFormats: {
                                 ...defaultSettings.messageFormats,
-                                ...(loadedSettings.messageFormats || {})
+                                ...(loadedSettings.messageFormats || {}),
+                                commands: {
+                                    ...defaultSettings.messageFormats.commands,
+                                    ...(loadedSettings.messageFormats?.commands || {})
+                                }
                             },
                             punishmentsWithText: loadedSettings.punishmentsWithText || defaultSettings.punishmentsWithText,
                             punishmentsWithTextAndCopy: loadedSettings.punishmentsWithTextAndCopy || defaultSettings.punishmentsWithTextAndCopy,
@@ -434,6 +443,10 @@ module.exports = (() => {
             }
 
             sendMessageToChannel(channelId, messageContent) {
+                if (!this.MessageActions) {
+                    BdApi.UI.showToast("MessageActions не загружен", {type: "error"});
+                    return;
+                }
                 this.MessageActions.sendMessage(channelId, {
                     content: messageContent,
                     tts: false,
@@ -449,9 +462,15 @@ module.exports = (() => {
                         return;
                     }
 
-                    // Проверяем наличие массива
+                    // Проверяем наличие массивов
                     if (!this.settings.punishmentsWithText) {
                         this.settings.punishmentsWithText = [];
+                    }
+                    if (!this.settings.punishmentsWithTextAndCopy) {
+                        this.settings.punishmentsWithTextAndCopy = [];
+                    }
+                    if (!this.settings.punishmentsWithCopy) {
+                        this.settings.punishmentsWithCopy = [];
                     }
 
                     let messageContent;
