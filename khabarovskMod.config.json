@@ -1,0 +1,69 @@
+{
+    "settings": {
+        "messageFormats": {
+            "withText": "<@{userId}> +{punishment} по пункту {ruleId} правил",
+            "onlyMention": "<@{userId}>",
+            "commands": {
+                "warn": "/warn user:<@{userId}> reason:{ruleId}",
+                "mute": "/mute user:<@{userId}> time:90 reason:{ruleId}",
+                "ban": "/ban user:<@{userId}> time: reason:{ruleId}",
+                "permban": "/ban user:<@{userId}> time:365 reason:{ruleId}",
+                "user": "/user user:<@{userId}>",
+                "punish": "/punish user:<@{userId}>"
+            }
+        },
+        "punishmentsWithText": [
+            "Устное предупреждение"
+        ],
+        "punishmentsWithTextAndCopy": [
+            "Предупреждение"
+        ],
+        "punishmentsWithCopy": [
+            "Мут 90 минут",
+            "Бан 7-15 дней",
+            "Перманентная блокировка"
+        ],
+        "showNotifications": true,
+        "autoSave": false,
+        "commandSettings": {
+            "defaultMuteTime": 90,
+            "defaultBanTime": 7,
+            "timeUnit": "minutes",
+            "useCustomTimeFormat": false
+        },
+        "notificationSettings": {
+            "timeout": 3000,
+            "position": "top",
+            "showSuccess": true,
+            "showError": true,
+            "showInfo": true
+        },
+        "logging": {
+            "enabled": false,
+            "logToConsole": true,
+            "logToFile": false,
+            "logFilePath": ""
+        },
+        "permissions": {
+            "requiredRoles": [],
+            "bypassRoles": [],
+            "checkPermissions": false
+        },
+        "ui": {
+            "theme": "dark",
+            "compactMode": false,
+            "showIcons": true,
+            "animationSpeed": "normal"
+        },
+        "advanced": {
+            "confirmActions": false,
+            "showPreview": true,
+            "maxHistory": 50,
+            "enableShortcuts": false
+        }
+    },
+    "customRules": {
+        "enabled": false,
+        "categories": []
+    }
+}

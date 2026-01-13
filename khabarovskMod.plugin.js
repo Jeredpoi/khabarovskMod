@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 0.0.7
+ * @version 0.0.9
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://raw.githubusercontent.com/Jeredpoi/khabarovskMod/main/khabarovskMod.plugin.js
@@ -12,7 +12,7 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "0.0.7",
+            version: "0.0.9",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
@@ -20,10 +20,19 @@ module.exports = (() => {
                 title: "Новые функции",
                 type: "added",
                 items: [
-                    "Улучшена структура конфигурационного файла",
+                    "🔥 МАССИВНОЕ ОБНОВЛЕНИЕ КОНФИГА - теперь он ИМБОВЫЙ!",
+                    "📦 Добавлена секция 'Настройки команд' - время мута/бана по умолчанию",
+                    "🔔 Добавлена секция 'Настройки уведомлений' - таймауты, типы уведомлений",
+                    "📝 Добавлена секция 'Логирование' - логи в консоль/файл",
+                    "🎨 Добавлена секция 'Настройки интерфейса' - компактный режим, иконки",
+                    "⚙️ Расширена секция 'Дополнительные настройки' - подтверждение действий, превью, горячие клавиши",
+                    "💾 Все новые настройки сохраняются в конфиг и загружаются автоматически",
+                    "🔄 Глубокое слияние настроек - старые конфиги работают, новые настройки добавляются",
+                    "Панель настроек с раскрывающимися секциями (accordion) - как в StaffTag",
+                    "Добавлена настройка 'Показывать уведомления' (вкл/выкл toast-уведомления)",
+                    "Добавлена настройка 'Автосохранение' (автоматическое сохранение при изменении)",
+                    "Улучшена структура конфигурационного файла с секциями (settings, customRules)",
                     "Добавлена поддержка обратной совместимости со старым форматом конфига",
-                    "Создан файл CONFIG_GUIDE.md с подробной документацией по настройке",
-                    "Улучшена функция сохранения конфига (автоматическое форматирование)",
                     "Полностью переработана панель настроек с улучшенным визуальным дизайном",
                     "Добавлена настройка всех форматов команд (/warn, /mute, /ban, /permban, /user, /punish)",
                     "Добавлена настройка всех категорий наказаний (с автоотправкой, с копированием и т.д.)",
@@ -82,7 +91,7 @@ module.exports = (() => {
                 this.ChannelStore = null;
                 this.configPath = path.join(BdApi.Plugins.folder, "khabarovskMod.config.json");
                 this.settings = this.loadSettings();
-                this.rules = {
+                this.defaultRules = {
                     "basic_rules": {
                         name: "Общие правила",
                         rules: {
@@ -129,6 +138,45 @@ module.exports = (() => {
                         }
                     }
                 };
+
+                // Загружаем кастомные правила из конфига и объединяем с дефолтными
+                this.rules = this.loadCustomRules();
+            }
+
+            loadCustomRules() {
+                const rules = {...this.defaultRules};
+
+                try {
+                    if (this.settings._customRules && this.settings._customRules.enabled) {
+                        const customCategories = this.settings._customRules.categories || [];
+
+                        // Добавляем кастомные категории к дефолтным
+                        customCategories.forEach(category => {
+                            if (category.id && category.name && category.rules) {
+                                // Преобразуем формат из конфига в формат плагина
+                                const categoryRules = {};
+                                Object.keys(category.rules).forEach(ruleId => {
+                                    const rule = category.rules[ruleId];
+                                    categoryRules[ruleId] = {
+                                        text: rule.text || ruleId,
+                                        punishments: Array.isArray(rule.punishments)
+                                            ? rule.punishments.map(p => typeof p === 'string' ? {name: p} : p)
+                                            : []
+                                    };
+                                });
+
+                                rules[category.id] = {
+                                    name: category.name,
+                                    rules: categoryRules
+                                };
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error("Ошибка загрузки кастомных правил:", error);
+                }
+
+                return rules;
             }
 
             loadSettings() {
@@ -147,16 +195,87 @@ module.exports = (() => {
                     },
                     punishmentsWithText: ["Устное предупреждение"],
                     punishmentsWithTextAndCopy: ["Предупреждение"],
-                    punishmentsWithCopy: ["Мут 90 минут", "Бан 7-15 дней", "Перманентная блокировка"]
+                    punishmentsWithCopy: ["Мут 90 минут", "Бан 7-15 дней", "Перманентная блокировка"],
+                    showNotifications: true,
+                    autoSave: false,
+                    commandSettings: {
+                        defaultMuteTime: 90,
+                        defaultBanTime: 7,
+                        timeUnit: "minutes",
+                        useCustomTimeFormat: false
+                    },
+                    notificationSettings: {
+                        timeout: 3000,
+                        position: "top",
+                        showSuccess: true,
+                        showError: true,
+                        showInfo: true
+                    },
+                    logging: {
+                        enabled: false,
+                        logToConsole: true,
+                        logToFile: false,
+                        logFilePath: ""
+                    },
+                    permissions: {
+                        requiredRoles: [],
+                        bypassRoles: [],
+                        checkPermissions: false
+                    },
+                    ui: {
+                        theme: "dark",
+                        compactMode: false,
+                        showIcons: true,
+                        animationSpeed: "normal"
+                    },
+                    advanced: {
+                        confirmActions: false,
+                        showPreview: true,
+                        maxHistory: 50,
+                        enableShortcuts: false
+                    }
+                };
+
+                const defaultConfig = {
+                    settings: defaultSettings,
+                    customRules: {
+                        enabled: false,
+                        categories: []
+                    }
                 };
 
                 try {
                     if (fs.existsSync(this.configPath)) {
                         const data = fs.readFileSync(this.configPath, "utf8");
-                        const loadedSettings = JSON.parse(data);
-                        // Объединяем с дефолтными настройками на случай если чего-то не хватает
-                        // Глубокое объединение для messageFormats, чтобы commands не терялись
-                        return {
+                        const loadedConfig = JSON.parse(data);
+
+                        // Поддержка старого формата (обратная совместимость)
+                        let loadedSettings;
+                        if (loadedConfig.settings) {
+                            // Новый формат с секциями
+                            loadedSettings = loadedConfig.settings;
+                        } else {
+                            // Старый формат (без секции settings)
+                            loadedSettings = loadedConfig;
+                        }
+
+                        // Функция глубокого слияния объектов
+                        const deepMerge = (target, source) => {
+                            const result = {...target};
+                            for (const key in source) {
+                                if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+                                    result[key] = deepMerge(target[key] || {}, source[key]);
+                                } else if (source[key] !== undefined) {
+                                    result[key] = source[key];
+                                }
+                            }
+                            return result;
+                        };
+
+                        // Объединяем с дефолтными настройками
+                        const mergedSettings = {
+                            ...defaultSettings,
+                            ...loadedSettings,
                             messageFormats: {
                                 ...defaultSettings.messageFormats,
                                 ...(loadedSettings.messageFormats || {}),
@@ -173,7 +292,22 @@ module.exports = (() => {
                                 : (loadedSettings.punishmentsWithTextAndCopy?.list || defaultSettings.punishmentsWithTextAndCopy),
                             punishmentsWithCopy: Array.isArray(loadedSettings.punishmentsWithCopy)
                                 ? loadedSettings.punishmentsWithCopy
-                                : (loadedSettings.punishmentsWithCopy?.list || defaultSettings.punishmentsWithCopy)
+                                : (loadedSettings.punishmentsWithCopy?.list || defaultSettings.punishmentsWithCopy),
+                            // Глубокое слияние вложенных объектов
+                            commandSettings: deepMerge(defaultSettings.commandSettings || {}, loadedSettings.commandSettings || {}),
+                            notificationSettings: deepMerge(defaultSettings.notificationSettings || {}, loadedSettings.notificationSettings || {}),
+                            logging: deepMerge(defaultSettings.logging || {}, loadedSettings.logging || {}),
+                            permissions: deepMerge(defaultSettings.permissions || {}, loadedSettings.permissions || {}),
+                            ui: deepMerge(defaultSettings.ui || {}, loadedSettings.ui || {}),
+                            advanced: deepMerge(defaultSettings.advanced || {}, loadedSettings.advanced || {})
+                        };
+
+                        // Загружаем кастомные правила
+                        const customRules = loadedConfig.customRules || defaultConfig.customRules;
+
+                        return {
+                            ...mergedSettings,
+                            _customRules: customRules
                         };
                     }
                 } catch (error) {
@@ -187,33 +321,78 @@ module.exports = (() => {
 
             saveSettings(settings) {
                 try {
-                    // Создаем красивую структурированную версию конфига
-                    const cleanSettings = {
-                        messageFormats: {
-                            withText: settings.messageFormats?.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил",
-                            onlyMention: settings.messageFormats?.onlyMention || "<@{userId}>",
-                            commands: {
-                                warn: settings.messageFormats?.commands?.warn || "/warn user:<@{userId}> reason:{ruleId}",
-                                mute: settings.messageFormats?.commands?.mute || "/mute user:<@{userId}> time:90 reason:{ruleId}",
-                                ban: settings.messageFormats?.commands?.ban || "/ban user:<@{userId}> time: reason:{ruleId}",
-                                permban: settings.messageFormats?.commands?.permban || "/ban user:<@{userId}> time:365 reason:{ruleId}",
-                                user: settings.messageFormats?.commands?.user || "/user user:<@{userId}>",
-                                punish: settings.messageFormats?.commands?.punish || "/punish user:<@{userId}>"
+                    // Извлекаем кастомные правила, если они есть
+                    const customRules = settings._customRules || { enabled: false, categories: [] };
+                    delete settings._customRules;
+
+                    // Создаем красивую структурированную версию конфига с секциями
+                    const configWithSections = {
+                        settings: {
+                            messageFormats: {
+                                withText: settings.messageFormats?.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил",
+                                onlyMention: settings.messageFormats?.onlyMention || "<@{userId}>",
+                                commands: {
+                                    warn: settings.messageFormats?.commands?.warn || "/warn user:<@{userId}> reason:{ruleId}",
+                                    mute: settings.messageFormats?.commands?.mute || "/mute user:<@{userId}> time:90 reason:{ruleId}",
+                                    ban: settings.messageFormats?.commands?.ban || "/ban user:<@{userId}> time: reason:{ruleId}",
+                                    permban: settings.messageFormats?.commands?.permban || "/ban user:<@{userId}> time:365 reason:{ruleId}",
+                                    user: settings.messageFormats?.commands?.user || "/user user:<@{userId}>",
+                                    punish: settings.messageFormats?.commands?.punish || "/punish user:<@{userId}>"
+                                }
+                            },
+                            punishmentsWithText: Array.isArray(settings.punishmentsWithText)
+                                ? settings.punishmentsWithText
+                                : (settings.punishmentsWithText?.list || ["Устное предупреждение"]),
+                            punishmentsWithTextAndCopy: Array.isArray(settings.punishmentsWithTextAndCopy)
+                                ? settings.punishmentsWithTextAndCopy
+                                : (settings.punishmentsWithTextAndCopy?.list || ["Предупреждение"]),
+                            punishmentsWithCopy: Array.isArray(settings.punishmentsWithCopy)
+                                ? settings.punishmentsWithCopy
+                                : (settings.punishmentsWithCopy?.list || ["Мут 90 минут", "Бан 7-15 дней", "Перманентная блокировка"]),
+                            showNotifications: settings.showNotifications !== false,
+                            autoSave: settings.autoSave === true,
+                            commandSettings: settings.commandSettings || {
+                                defaultMuteTime: 90,
+                                defaultBanTime: 7,
+                                timeUnit: "minutes",
+                                useCustomTimeFormat: false
+                            },
+                            notificationSettings: settings.notificationSettings || {
+                                timeout: 3000,
+                                position: "top",
+                                showSuccess: true,
+                                showError: true,
+                                showInfo: true
+                            },
+                            logging: settings.logging || {
+                                enabled: false,
+                                logToConsole: true,
+                                logToFile: false,
+                                logFilePath: ""
+                            },
+                            permissions: settings.permissions || {
+                                requiredRoles: [],
+                                bypassRoles: [],
+                                checkPermissions: false
+                            },
+                            ui: settings.ui || {
+                                theme: "dark",
+                                compactMode: false,
+                                showIcons: true,
+                                animationSpeed: "normal"
+                            },
+                            advanced: settings.advanced || {
+                                confirmActions: false,
+                                showPreview: true,
+                                maxHistory: 50,
+                                enableShortcuts: false
                             }
                         },
-                        punishmentsWithText: Array.isArray(settings.punishmentsWithText) 
-                            ? settings.punishmentsWithText 
-                            : (settings.punishmentsWithText?.list || ["Устное предупреждение"]),
-                        punishmentsWithTextAndCopy: Array.isArray(settings.punishmentsWithTextAndCopy)
-                            ? settings.punishmentsWithTextAndCopy
-                            : (settings.punishmentsWithTextAndCopy?.list || ["Предупреждение"]),
-                        punishmentsWithCopy: Array.isArray(settings.punishmentsWithCopy)
-                            ? settings.punishmentsWithCopy
-                            : (settings.punishmentsWithCopy?.list || ["Мут 90 минут", "Бан 7-15 дней", "Перманентная блокировка"])
+                        customRules: customRules
                     };
-                    
+
                     // Сохраняем с красивым форматированием (4 пробела для отступов)
-                    fs.writeFileSync(this.configPath, JSON.stringify(cleanSettings, null, 4), "utf8");
+                    fs.writeFileSync(this.configPath, JSON.stringify(configWithSections, null, 4), "utf8");
                 } catch (error) {
                     console.error("Ошибка сохранения настроек:", error);
                 }
@@ -293,7 +472,7 @@ module.exports = (() => {
                                         action: () => {
                                             // Используем формат команды из настроек, как для других команд (строка 430)
                                             if (!this.settings.messageFormats?.commands?.user) {
-                                                BdApi.UI.showToast("Формат команды /user не найден в настройках", {type: "error"});
+                                                this.showToast("Формат команды /user не найден в настройках", "error");
                                                 return;
                                             }
 
@@ -311,7 +490,7 @@ module.exports = (() => {
                                         action: () => {
                                             // Используем формат команды из настроек, как для других команд (строка 430)
                                             if (!this.settings.messageFormats?.commands?.punish) {
-                                                BdApi.UI.showToast("Формат команды /punish не найден в настройках", {type: "error"});
+                                                this.showToast("Формат команды /punish не найден в настройках", "error");
                                                 return;
                                             }
 
@@ -376,24 +555,64 @@ module.exports = (() => {
                 title.style.fontWeight = "600";
                 panel.appendChild(title);
 
-                // Функция создания секции
-                const createSection = (titleText, icon = "📋") => {
-                    const section = document.createElement("div");
-                    section.style.marginBottom = "30px";
-                    section.style.padding = "15px";
-                    section.style.backgroundColor = "rgba(79, 84, 92, 0.3)";
-                    section.style.borderRadius = "8px";
-                    section.style.border = "1px solid rgba(79, 84, 92, 0.5)";
+                // Функция создания раскрывающейся секции (accordion)
+                const createCollapsibleSection = (titleText, icon = "📋", defaultOpen = false) => {
+                    const sectionWrapper = document.createElement("div");
+                    sectionWrapper.style.marginBottom = "10px";
+                    sectionWrapper.style.backgroundColor = "rgba(79, 84, 92, 0.3)";
+                    sectionWrapper.style.borderRadius = "8px";
+                    sectionWrapper.style.border = "1px solid rgba(79, 84, 92, 0.5)";
+                    sectionWrapper.style.overflow = "hidden";
 
-                    const sectionTitle = document.createElement("h3");
+                    // Заголовок секции (кликабельный)
+                    const sectionHeader = document.createElement("div");
+                    sectionHeader.style.padding = "15px 20px";
+                    sectionHeader.style.cursor = "pointer";
+                    sectionHeader.style.display = "flex";
+                    sectionHeader.style.alignItems = "center";
+                    sectionHeader.style.justifyContent = "space-between";
+                    sectionHeader.style.userSelect = "none";
+                    sectionHeader.style.transition = "background 0.2s";
+                    sectionHeader.onmouseenter = () => sectionHeader.style.backgroundColor = "rgba(79, 84, 92, 0.5)";
+                    sectionHeader.onmouseleave = () => {
+                        if (!sectionContent.style.display || sectionContent.style.display !== "none") {
+                            sectionHeader.style.backgroundColor = "transparent";
+                        }
+                    };
+
+                    const sectionTitle = document.createElement("div");
                     sectionTitle.textContent = `${icon} ${titleText}`;
-                    sectionTitle.style.margin = "0 0 15px 0";
                     sectionTitle.style.color = "#FFFFFF";
-                    sectionTitle.style.fontSize = "18px";
+                    sectionTitle.style.fontSize = "16px";
                     sectionTitle.style.fontWeight = "600";
-                    section.appendChild(sectionTitle);
+                    sectionHeader.appendChild(sectionTitle);
 
-                    return section;
+                    const arrow = document.createElement("div");
+                    arrow.textContent = defaultOpen ? "▼" : "▶";
+                    arrow.style.color = "#B9BBBE";
+                    arrow.style.fontSize = "12px";
+                    arrow.style.marginLeft = "10px";
+                    arrow.style.transition = "transform 0.2s";
+                    sectionHeader.appendChild(arrow);
+
+                    // Контент секции
+                    const sectionContent = document.createElement("div");
+                    sectionContent.style.padding = "15px 20px";
+                    sectionContent.style.display = defaultOpen ? "block" : "none";
+                    sectionContent.style.borderTop = "1px solid rgba(79, 84, 92, 0.5)";
+
+                    // Переключение видимости
+                    sectionHeader.onclick = () => {
+                        const isOpen = sectionContent.style.display !== "none";
+                        sectionContent.style.display = isOpen ? "none" : "block";
+                        arrow.textContent = isOpen ? "▶" : "▼";
+                        sectionHeader.style.backgroundColor = isOpen ? "transparent" : "rgba(79, 84, 92, 0.5)";
+                    };
+
+                    sectionWrapper.appendChild(sectionHeader);
+                    sectionWrapper.appendChild(sectionContent);
+
+                    return { wrapper: sectionWrapper, content: sectionContent };
                 };
 
                 // Функция создания поля ввода
@@ -442,97 +661,337 @@ module.exports = (() => {
                     return { container, input };
                 };
 
-                // Секция: Форматы сообщений
-                const formatsSection = createSection("Форматы сообщений", "💬");
+                // Секция: Форматы сообщений (раскрывающаяся)
+                const formatsSection = createCollapsibleSection("Форматы сообщений", "💬", true);
 
                 const withTextField = createInputField(
                     "Формат для автоотправки сообщений:",
                     this.settings.messageFormats?.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил",
                     "Доступные переменные: {userId}, {punishment}, {ruleId}"
                 );
-                formatsSection.appendChild(withTextField.container);
+                formatsSection.content.appendChild(withTextField.container);
 
                 const onlyMentionField = createInputField(
                     "Формат только упоминания:",
                     this.settings.messageFormats?.onlyMention || "<@{userId}>",
                     "Используется для наказаний без автоотправки"
                 );
-                formatsSection.appendChild(onlyMentionField.container);
+                formatsSection.content.appendChild(onlyMentionField.container);
 
-                panel.appendChild(formatsSection);
+                panel.appendChild(formatsSection.wrapper);
 
-                // Секция: Форматы команд
-                const commandsSection = createSection("Форматы команд", "⚡");
+                // Секция: Форматы команд (раскрывающаяся)
+                const commandsSection = createCollapsibleSection("Форматы команд", "⚡", false);
 
                 const warnField = createInputField(
                     "Команда /warn:",
                     this.settings.messageFormats?.commands?.warn || "/warn user:<@{userId}> reason:{ruleId}",
                     "Используется для наказания 'Предупреждение'"
                 );
-                commandsSection.appendChild(warnField.container);
+                commandsSection.content.appendChild(warnField.container);
 
                 const muteField = createInputField(
                     "Команда /mute:",
                     this.settings.messageFormats?.commands?.mute || "/mute user:<@{userId}> time:90 reason:{ruleId}",
                     "Используется для наказания 'Мут 90 минут'"
                 );
-                commandsSection.appendChild(muteField.container);
+                commandsSection.content.appendChild(muteField.container);
 
                 const banField = createInputField(
                     "Команда /ban:",
                     this.settings.messageFormats?.commands?.ban || "/ban user:<@{userId}> time: reason:{ruleId}",
                     "Используется для наказания 'Бан 7-15 дней'"
                 );
-                commandsSection.appendChild(banField.container);
+                commandsSection.content.appendChild(banField.container);
 
                 const permbanField = createInputField(
                     "Команда /ban (перманент):",
                     this.settings.messageFormats?.commands?.permban || "/ban user:<@{userId}> time:365 reason:{ruleId}",
                     "Используется для наказания 'Перманентная блокировка'"
                 );
-                commandsSection.appendChild(permbanField.container);
+                commandsSection.content.appendChild(permbanField.container);
 
                 const userField = createInputField(
                     "Команда /user:",
                     this.settings.messageFormats?.commands?.user || "/user user:<@{userId}>",
                     "Используется в инструментах модерации"
                 );
-                commandsSection.appendChild(userField.container);
+                commandsSection.content.appendChild(userField.container);
 
                 const punishField = createInputField(
                     "Команда /punish:",
                     this.settings.messageFormats?.commands?.punish || "/punish user:<@{userId}>",
                     "Используется в инструментах модерации"
                 );
-                commandsSection.appendChild(punishField.container);
+                commandsSection.content.appendChild(punishField.container);
 
-                panel.appendChild(commandsSection);
+                panel.appendChild(commandsSection.wrapper);
 
-                // Секция: Категории наказаний
-                const punishmentsSection = createSection("Категории наказаний", "⚖️");
+                // Секция: Категории наказаний (раскрывающаяся)
+                const punishmentsSection = createCollapsibleSection("Категории наказаний", "⚖️", false);
 
                 const withTextField2 = createInputField(
                     "Наказания с автоотправкой (через запятую):",
                     (this.settings.punishmentsWithText || ["Устное предупреждение"]).join(", "),
                     "Эти наказания отправляют сообщение автоматически в чат"
                 );
-                punishmentsSection.appendChild(withTextField2.container);
+                punishmentsSection.content.appendChild(withTextField2.container);
 
                 const withTextAndCopyField = createInputField(
                     "Наказания с автоотправкой + копированием команды (через запятую):",
                     (this.settings.punishmentsWithTextAndCopy || ["Предупреждение"]).join(", "),
                     "Эти наказания отправляют сообщение И копируют команду в буфер обмена"
                 );
-                punishmentsSection.appendChild(withTextAndCopyField.container);
+                punishmentsSection.content.appendChild(withTextAndCopyField.container);
 
                 const withCopyField = createInputField(
                     "Наказания только с копированием команды (через запятую):",
                     (this.settings.punishmentsWithCopy || ["Мут 90 минут", "Бан 7-15 дней", "Перманентная блокировка"]).join(", "),
                     "Эти наказания только копируют команду в буфер обмена"
                 );
-                punishmentsSection.appendChild(withCopyField.container);
+                punishmentsSection.content.appendChild(withCopyField.container);
 
-                panel.appendChild(punishmentsSection);
+                panel.appendChild(punishmentsSection.wrapper);
+
+                // Секция: Дополнительные настройки (раскрывающаяся)
+                const advancedSection = createCollapsibleSection("Дополнительные настройки", "🔧", false);
+
+                // Функция создания переключателя (toggle)
+                const createToggle = (labelText, initialValue, hintText) => {
+                    let currentValue = initialValue;
+                    const container = document.createElement("div");
+                    container.style.marginBottom = "20px";
+                    container.style.display = "flex";
+                    container.style.alignItems = "center";
+                    container.style.justifyContent = "space-between";
+
+                    const labelContainer = document.createElement("div");
+                    labelContainer.style.flex = "1";
+
+                    const label = document.createElement("label");
+                    label.textContent = labelText;
+                    label.style.display = "block";
+                    label.style.marginBottom = "4px";
+                    label.style.color = "#B9BBBE";
+                    label.style.fontSize = "14px";
+                    label.style.fontWeight = "500";
+                    label.style.cursor = "pointer";
+                    labelContainer.appendChild(label);
+
+                    if (hintText) {
+                        const hint = document.createElement("small");
+                        hint.textContent = hintText;
+                        hint.style.display = "block";
+                        hint.style.color = "#72767D";
+                        hint.style.fontSize = "12px";
+                        labelContainer.appendChild(hint);
+                    }
+
+                    const toggle = document.createElement("div");
+                    toggle.style.width = "44px";
+                    toggle.style.height = "24px";
+                    toggle.style.borderRadius = "12px";
+                    toggle.style.backgroundColor = currentValue ? "#5865F2" : "#4E5058";
+                    toggle.style.position = "relative";
+                    toggle.style.cursor = "pointer";
+                    toggle.style.transition = "background 0.2s";
+                    toggle.style.flexShrink = "0";
+
+                    const toggleCircle = document.createElement("div");
+                    toggleCircle.style.width = "18px";
+                    toggleCircle.style.height = "18px";
+                    toggleCircle.style.borderRadius = "50%";
+                    toggleCircle.style.backgroundColor = "#FFFFFF";
+                    toggleCircle.style.position = "absolute";
+                    toggleCircle.style.top = "3px";
+                    toggleCircle.style.left = currentValue ? "23px" : "3px";
+                    toggleCircle.style.transition = "left 0.2s";
+                    toggle.appendChild(toggleCircle);
+
+                    const updateToggle = (newValue) => {
+                        currentValue = newValue;
+                        toggle.style.backgroundColor = newValue ? "#5865F2" : "#4E5058";
+                        toggleCircle.style.left = newValue ? "23px" : "3px";
+                    };
+
+                    toggle.onclick = () => updateToggle(!currentValue);
+                    label.onclick = () => toggle.onclick();
+
+                    // Метод для получения значения
+                    toggle.getValue = () => currentValue;
+                    toggle.setValue = (val) => updateToggle(val);
+
+                    container.appendChild(labelContainer);
+                    container.appendChild(toggle);
+
+                    return { container, toggle };
+                };
+
+                const showNotificationsToggle = createToggle(
+                    "Показывать уведомления",
+                    this.settings.showNotifications !== false,
+                    "Показывать toast-уведомления при выполнении действий"
+                );
+                advancedSection.content.appendChild(showNotificationsToggle.container);
+
+                const autoSaveToggle = createToggle(
+                    "Автосохранение",
+                    this.settings.autoSave === true,
+                    "Автоматически сохранять настройки при изменении"
+                );
+                advancedSection.content.appendChild(autoSaveToggle.container);
+
+                const confirmActionsToggle = createToggle(
+                    "Подтверждение действий",
+                    this.settings.advanced?.confirmActions === true,
+                    "Запрашивать подтверждение перед выполнением действий"
+                );
+                advancedSection.content.appendChild(confirmActionsToggle.container);
+
+                const showPreviewToggle = createToggle(
+                    "Показывать превью",
+                    this.settings.advanced?.showPreview !== false,
+                    "Показывать превью команды перед выполнением"
+                );
+                advancedSection.content.appendChild(showPreviewToggle.container);
+
+                const enableShortcutsToggle = createToggle(
+                    "Горячие клавиши",
+                    this.settings.advanced?.enableShortcuts === true,
+                    "Включить поддержку горячих клавиш"
+                );
+                advancedSection.content.appendChild(enableShortcutsToggle.container);
+
+                // Если автосохранение включено, добавляем обработчики
+                if (this.settings.autoSave) {
+                    const allInputs = [
+                        withTextField.input, onlyMentionField.input,
+                        warnField.input, muteField.input, banField.input, permbanField.input,
+                        userField.input, punishField.input,
+                        withTextField2.input, withTextAndCopyField.input, withCopyField.input
+                    ];
+
+                    allInputs.forEach(input => {
+                        input.addEventListener('change', () => {
+                            if (autoSaveToggle.toggle.getValue()) {
+                                saveButton.onclick();
+                            }
+                        });
+                    });
+                }
+
+                panel.appendChild(advancedSection.wrapper);
+
+                // Секция: Настройки команд (раскрывающаяся)
+                const commandSettingsSection = createCollapsibleSection("Настройки команд", "⚙️", false);
+
+                const defaultMuteTimeField = createInputField(
+                    "Время мута по умолчанию (минуты):",
+                    this.settings.commandSettings?.defaultMuteTime || 90,
+                    "Время мута в минутах, используемое по умолчанию"
+                );
+                defaultMuteTimeField.input.type = "number";
+                defaultMuteTimeField.input.min = "1";
+                commandSettingsSection.content.appendChild(defaultMuteTimeField.container);
+
+                const defaultBanTimeField = createInputField(
+                    "Время бана по умолчанию (дни):",
+                    this.settings.commandSettings?.defaultBanTime || 7,
+                    "Время бана в днях, используемое по умолчанию"
+                );
+                defaultBanTimeField.input.type = "number";
+                defaultBanTimeField.input.min = "1";
+                commandSettingsSection.content.appendChild(defaultBanTimeField.container);
+
+                panel.appendChild(commandSettingsSection.wrapper);
+
+                // Секция: Настройки уведомлений (раскрывающаяся)
+                const notificationSettingsSection = createCollapsibleSection("Настройки уведомлений", "🔔", false);
+
+                const notificationTimeoutField = createInputField(
+                    "Таймаут уведомлений (мс):",
+                    this.settings.notificationSettings?.timeout || 3000,
+                    "Время отображения уведомлений в миллисекундах"
+                );
+                notificationTimeoutField.input.type = "number";
+                notificationTimeoutField.input.min = "1000";
+                notificationTimeoutField.input.max = "10000";
+                notificationSettingsSection.content.appendChild(notificationTimeoutField.container);
+
+                const showSuccessToggle = createToggle(
+                    "Показывать успешные уведомления",
+                    this.settings.notificationSettings?.showSuccess !== false,
+                    "Показывать уведомления об успешных операциях"
+                );
+                notificationSettingsSection.content.appendChild(showSuccessToggle.container);
+
+                const showErrorToggle = createToggle(
+                    "Показывать ошибки",
+                    this.settings.notificationSettings?.showError !== false,
+                    "Показывать уведомления об ошибках"
+                );
+                notificationSettingsSection.content.appendChild(showErrorToggle.container);
+
+                const showInfoToggle = createToggle(
+                    "Показывать информационные уведомления",
+                    this.settings.notificationSettings?.showInfo !== false,
+                    "Показывать информационные уведомления"
+                );
+                notificationSettingsSection.content.appendChild(showInfoToggle.container);
+
+                panel.appendChild(notificationSettingsSection.wrapper);
+
+                // Секция: Логирование (раскрывающаяся)
+                const loggingSection = createCollapsibleSection("Логирование", "📝", false);
+
+                const loggingEnabledToggle = createToggle(
+                    "Включить логирование",
+                    this.settings.logging?.enabled === true,
+                    "Включить запись логов действий"
+                );
+                loggingSection.content.appendChild(loggingEnabledToggle.container);
+
+                const logToConsoleToggle = createToggle(
+                    "Логировать в консоль",
+                    this.settings.logging?.logToConsole !== false,
+                    "Выводить логи в консоль браузера"
+                );
+                loggingSection.content.appendChild(logToConsoleToggle.container);
+
+                const logToFileToggle = createToggle(
+                    "Логировать в файл",
+                    this.settings.logging?.logToFile === true,
+                    "Сохранять логи в файл"
+                );
+                loggingSection.content.appendChild(logToFileToggle.container);
+
+                const logFilePathField = createInputField(
+                    "Путь к файлу логов:",
+                    this.settings.logging?.logFilePath || "",
+                    "Путь к файлу для сохранения логов (оставьте пустым для автоопределения)"
+                );
+                loggingSection.content.appendChild(logFilePathField.container);
+
+                panel.appendChild(loggingSection.wrapper);
+
+                // Секция: Интерфейс (раскрывающаяся)
+                const uiSection = createCollapsibleSection("Настройки интерфейса", "🎨", false);
+
+                const compactModeToggle = createToggle(
+                    "Компактный режим",
+                    this.settings.ui?.compactMode === true,
+                    "Использовать компактный режим отображения"
+                );
+                uiSection.content.appendChild(compactModeToggle.container);
+
+                const showIconsToggle = createToggle(
+                    "Показывать иконки",
+                    this.settings.ui?.showIcons !== false,
+                    "Отображать иконки в меню и интерфейсе"
+                );
+                uiSection.content.appendChild(showIconsToggle.container);
+
+                panel.appendChild(uiSection.wrapper);
 
                 // Кнопки действий
                 const buttonsContainer = document.createElement("div");
@@ -582,6 +1041,40 @@ module.exports = (() => {
                         this.settings.punishmentsWithText = withTextField2.input.value.split(",").map(s => s.trim()).filter(s => s);
                         this.settings.punishmentsWithTextAndCopy = withTextAndCopyField.input.value.split(",").map(s => s.trim()).filter(s => s);
                         this.settings.punishmentsWithCopy = withCopyField.input.value.split(",").map(s => s.trim()).filter(s => s);
+
+                        // Сохраняем дополнительные настройки
+                        this.settings.showNotifications = showNotificationsToggle.toggle.getValue();
+                        this.settings.autoSave = autoSaveToggle.toggle.getValue();
+
+                        // Сохраняем продвинутые настройки
+                        if (!this.settings.advanced) this.settings.advanced = {};
+                        this.settings.advanced.confirmActions = confirmActionsToggle.toggle.getValue();
+                        this.settings.advanced.showPreview = showPreviewToggle.toggle.getValue();
+                        this.settings.advanced.enableShortcuts = enableShortcutsToggle.toggle.getValue();
+
+                        // Сохраняем настройки команд
+                        if (!this.settings.commandSettings) this.settings.commandSettings = {};
+                        this.settings.commandSettings.defaultMuteTime = parseInt(defaultMuteTimeField.input.value) || 90;
+                        this.settings.commandSettings.defaultBanTime = parseInt(defaultBanTimeField.input.value) || 7;
+
+                        // Сохраняем настройки уведомлений
+                        if (!this.settings.notificationSettings) this.settings.notificationSettings = {};
+                        this.settings.notificationSettings.timeout = parseInt(notificationTimeoutField.input.value) || 3000;
+                        this.settings.notificationSettings.showSuccess = showSuccessToggle.toggle.getValue();
+                        this.settings.notificationSettings.showError = showErrorToggle.toggle.getValue();
+                        this.settings.notificationSettings.showInfo = showInfoToggle.toggle.getValue();
+
+                        // Сохраняем настройки логирования
+                        if (!this.settings.logging) this.settings.logging = {};
+                        this.settings.logging.enabled = loggingEnabledToggle.toggle.getValue();
+                        this.settings.logging.logToConsole = logToConsoleToggle.toggle.getValue();
+                        this.settings.logging.logToFile = logToFileToggle.toggle.getValue();
+                        this.settings.logging.logFilePath = logFilePathField.input.value.trim();
+
+                        // Сохраняем настройки интерфейса
+                        if (!this.settings.ui) this.settings.ui = {};
+                        this.settings.ui.compactMode = compactModeToggle.toggle.getValue();
+                        this.settings.ui.showIcons = showIconsToggle.toggle.getValue();
 
                         this.saveSettings(this.settings);
                         BdApi.UI.showToast("✅ Настройки успешно сохранены!", {type: "success"});
@@ -677,7 +1170,7 @@ module.exports = (() => {
             executePunishment(user, ruleId, punishment) {
                 try {
                     if (!this.MessageActions || !this.ChannelStore) {
-                        BdApi.UI.showToast("Discord модули не загружены", {type: "error"});
+                        this.showToast("Discord модули не загружены", "error");
                         return;
                     }
 
@@ -709,14 +1202,14 @@ module.exports = (() => {
                         // Отправляем сообщение
                         this.sendMessageToChannel(channelId, messageContent);
 
-                        BdApi.UI.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, {type: "success"});
+                        this.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, "success");
                     } else if (this.settings.punishmentsWithTextAndCopy.includes(punishment)) {
                         const channelId = this.getCurrentChannelId();
                         if (!channelId) return;
 
                         // Проверяем наличие команды warn
                         if (!this.settings.messageFormats?.commands?.warn) {
-                            BdApi.UI.showToast("Формат команды /warn не найден в настройках", {type: "error"});
+                            this.showToast("Формат команды /warn не найден в настройках", "error");
                             return;
                         }
 
@@ -735,12 +1228,12 @@ module.exports = (() => {
                         // Отправляем сообщение
                         this.sendMessageToChannel(channelId, messageContent);
 
-                        BdApi.UI.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, {type: "success"});
+                        this.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, "success");
                     } else if (this.settings.punishmentsWithCopy.includes(punishment)) {
                         // Проверяем наличие команд перед использованием
                         if (punishment === "Мут 90 минут") {
                             if (!this.settings.messageFormats?.commands?.mute) {
-                                BdApi.UI.showToast("Формат команды /mute не найден в настройках", {type: "error"});
+                                this.showToast("Формат команды /mute не найден в настройках", "error");
                                 return;
                             }
                             commandContent = this.settings.messageFormats.commands.mute
@@ -748,7 +1241,7 @@ module.exports = (() => {
                                 .replace("{ruleId}", ruleId);
                         } else if (punishment === "Бан 7-15 дней") {
                             if (!this.settings.messageFormats?.commands?.ban) {
-                                BdApi.UI.showToast("Формат команды /ban не найден в настройках", {type: "error"});
+                                this.showToast("Формат команды /ban не найден в настройках", "error");
                                 return;
                             }
                             commandContent = this.settings.messageFormats.commands.ban
@@ -756,7 +1249,7 @@ module.exports = (() => {
                                 .replace("{ruleId}", ruleId);
                         } else if (punishment === "Перманентная блокировка") {
                             if (!this.settings.messageFormats?.commands?.permban) {
-                                BdApi.UI.showToast("Формат команды /permban не найден в настройках", {type: "error"});
+                                this.showToast("Формат команды /permban не найден в настройках", "error");
                                 return;
                             }
                             commandContent = this.settings.messageFormats.commands.permban
@@ -779,7 +1272,13 @@ module.exports = (() => {
 
                 } catch (error) {
                     console.error("khabarovskMod executePunishment error:", error);
-                    BdApi.UI.showToast(`Ошибка: ${error.message}`, {type: "error"});
+                    this.showToast(`Ошибка: ${error.message}`, "error");
+                }
+            }
+
+            showToast(message, type = "info") {
+                if (this.settings.showNotifications !== false) {
+                    BdApi.UI.showToast(message, {type: type});
                 }
             }
 
@@ -787,7 +1286,7 @@ module.exports = (() => {
                 try {
                     // Самый надежный способ - через буфер обмена
                     navigator.clipboard.writeText(text).then(() => {
-                        BdApi.UI.showToast(`Скопировано в буфер: "${text}". Нажмите Ctrl+V в чате.`, {type: "info", timeout: 5000});
+                        this.showToast(`Скопировано в буфер: "${text}". Нажмите Ctrl+V в чате.`, "info");
                     }).catch(err => {
                         console.error("Ошибка копирования:", err);
 
@@ -801,9 +1300,9 @@ module.exports = (() => {
 
                         try {
                             document.execCommand('copy');
-                            BdApi.UI.showToast(`Скопировано в буфер: "${text}". Нажмите Ctrl+V в чате.`, {type: "info", timeout: 5000});
+                            this.showToast(`Скопировано в буфер: "${text}". Нажмите Ctrl+V в чате.`, "info");
                         } catch (e) {
-                            BdApi.UI.showToast("Не удалось скопировать текст", {type: "error"});
+                            this.showToast("Не удалось скопировать текст", "error");
                         } finally {
                             // Удаляем textArea в любом случае
                             if (textArea.parentNode) {
@@ -814,7 +1313,7 @@ module.exports = (() => {
 
                 } catch (error) {
                     console.error("Ошибка вставки текста:", error);
-                    BdApi.UI.showToast(`Ошибка: ${error.message}`, {type: "error"});
+                    this.showToast(`Ошибка: ${error.message}`, "error");
                 }
             }
         };
