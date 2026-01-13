@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 0.0.6
+ * @version 0.0.7
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://raw.githubusercontent.com/Jeredpoi/khabarovskMod/main/khabarovskMod.plugin.js
@@ -12,7 +12,7 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "0.0.6",
+            version: "0.0.7",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
@@ -20,6 +20,10 @@ module.exports = (() => {
                 title: "Новые функции",
                 type: "added",
                 items: [
+                    "Улучшена структура конфигурационного файла",
+                    "Добавлена поддержка обратной совместимости со старым форматом конфига",
+                    "Создан файл CONFIG_GUIDE.md с подробной документацией по настройке",
+                    "Улучшена функция сохранения конфига (автоматическое форматирование)",
                     "Полностью переработана панель настроек с улучшенным визуальным дизайном",
                     "Добавлена настройка всех форматов команд (/warn, /mute, /ban, /permban, /user, /punish)",
                     "Добавлена настройка всех категорий наказаний (с автоотправкой, с копированием и т.д.)",
@@ -161,9 +165,15 @@ module.exports = (() => {
                                     ...(loadedSettings.messageFormats?.commands || {})
                                 }
                             },
-                            punishmentsWithText: loadedSettings.punishmentsWithText || defaultSettings.punishmentsWithText,
-                            punishmentsWithTextAndCopy: loadedSettings.punishmentsWithTextAndCopy || defaultSettings.punishmentsWithTextAndCopy,
-                            punishmentsWithCopy: loadedSettings.punishmentsWithCopy || defaultSettings.punishmentsWithCopy
+                            punishmentsWithText: Array.isArray(loadedSettings.punishmentsWithText)
+                                ? loadedSettings.punishmentsWithText
+                                : (loadedSettings.punishmentsWithText?.list || defaultSettings.punishmentsWithText),
+                            punishmentsWithTextAndCopy: Array.isArray(loadedSettings.punishmentsWithTextAndCopy)
+                                ? loadedSettings.punishmentsWithTextAndCopy
+                                : (loadedSettings.punishmentsWithTextAndCopy?.list || defaultSettings.punishmentsWithTextAndCopy),
+                            punishmentsWithCopy: Array.isArray(loadedSettings.punishmentsWithCopy)
+                                ? loadedSettings.punishmentsWithCopy
+                                : (loadedSettings.punishmentsWithCopy?.list || defaultSettings.punishmentsWithCopy)
                         };
                     }
                 } catch (error) {
@@ -177,7 +187,33 @@ module.exports = (() => {
 
             saveSettings(settings) {
                 try {
-                    fs.writeFileSync(this.configPath, JSON.stringify(settings, null, 4), "utf8");
+                    // Создаем красивую структурированную версию конфига
+                    const cleanSettings = {
+                        messageFormats: {
+                            withText: settings.messageFormats?.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил",
+                            onlyMention: settings.messageFormats?.onlyMention || "<@{userId}>",
+                            commands: {
+                                warn: settings.messageFormats?.commands?.warn || "/warn user:<@{userId}> reason:{ruleId}",
+                                mute: settings.messageFormats?.commands?.mute || "/mute user:<@{userId}> time:90 reason:{ruleId}",
+                                ban: settings.messageFormats?.commands?.ban || "/ban user:<@{userId}> time: reason:{ruleId}",
+                                permban: settings.messageFormats?.commands?.permban || "/ban user:<@{userId}> time:365 reason:{ruleId}",
+                                user: settings.messageFormats?.commands?.user || "/user user:<@{userId}>",
+                                punish: settings.messageFormats?.commands?.punish || "/punish user:<@{userId}>"
+                            }
+                        },
+                        punishmentsWithText: Array.isArray(settings.punishmentsWithText) 
+                            ? settings.punishmentsWithText 
+                            : (settings.punishmentsWithText?.list || ["Устное предупреждение"]),
+                        punishmentsWithTextAndCopy: Array.isArray(settings.punishmentsWithTextAndCopy)
+                            ? settings.punishmentsWithTextAndCopy
+                            : (settings.punishmentsWithTextAndCopy?.list || ["Предупреждение"]),
+                        punishmentsWithCopy: Array.isArray(settings.punishmentsWithCopy)
+                            ? settings.punishmentsWithCopy
+                            : (settings.punishmentsWithCopy?.list || ["Мут 90 минут", "Бан 7-15 дней", "Перманентная блокировка"])
+                    };
+                    
+                    // Сохраняем с красивым форматированием (4 пробела для отступов)
+                    fs.writeFileSync(this.configPath, JSON.stringify(cleanSettings, null, 4), "utf8");
                 } catch (error) {
                     console.error("Ошибка сохранения настроек:", error);
                 }
