@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 0.0.9
+ * @version 0.1.0
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://raw.githubusercontent.com/Jeredpoi/khabarovskMod/main/khabarovskMod.plugin.js
@@ -12,7 +12,7 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "0.0.9",
+            version: "0.1.0",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
@@ -20,7 +20,10 @@ module.exports = (() => {
                 title: "Новые функции",
                 type: "added",
                 items: [
-                    "🔥 МАССИВНОЕ ОБНОВЛЕНИЕ КОНФИГА - теперь он ИМБОВЫЙ!",
+                    "Добавлены формы наказаний (устное предупреждение, предупреждение, мут, бан)",
+                    "Формы наказаний доступны в меню модерации и копируются с автоподстановкой",
+                    "Добавлены команды очистки (clear one / clear member) в меню модерации",
+                    "🔥 МАССИВНОЕ ОБНОВЛЕНИЕ КОНФИГА",
                     "📦 Добавлена секция 'Настройки команд' - время мута/бана по умолчанию",
                     "🔔 Добавлена секция 'Настройки уведомлений' - таймауты, типы уведомлений",
                     "📝 Добавлена секция 'Логирование' - логи в консоль/файл",
@@ -87,6 +90,7 @@ module.exports = (() => {
             constructor() {
                 super();
                 this.contextMenuPatch = null;
+                this.messageMenuPatches = [];
                 this.MessageActions = null;
                 this.ChannelStore = null;
                 this.configPath = path.join(BdApi.Plugins.folder, "khabarovskMod.config.json");
@@ -189,7 +193,9 @@ module.exports = (() => {
                             ban: "/ban user:<@{userId}> time: reason:{ruleId}",
                             permban: "/ban user:<@{userId}> time:365 reason:{ruleId}",
                             user: "/user user:<@{userId}>",
-                            punish: "/punish user:<@{userId}>"
+                            punish: "/punish user:<@{userId}>",
+                            clearOne: "/clear one message_Id:<@{messageId}>",
+                            clearMember: "/clear member user:<@{userId}>"
                         },
                         onlyMention: "<@{userId}>"
                     },
@@ -231,8 +237,11 @@ module.exports = (() => {
                     advanced: {
                         confirmActions: false,
                         showPreview: true,
-                        maxHistory: 50,
-                        enableShortcuts: false
+                        maxHistory: 50
+                    },
+                    formConfig: {
+                        moderatorNick: "Ваш_Nick_Name",
+                        template: "1) Ваш Nick_Name: {moderatorNick}\n2) ID Discord и тег нарушителя: {userId} / {userTag}\n3) Пункт правил, который был нарушен: {ruleId}\n4) Выданное наказание: {punishment}\n5) Дата выдачи: {dateIssued}\n6) Дата снятия: {dateEnd}\n7) Доказательства: "
                     }
                 };
 
@@ -301,6 +310,14 @@ module.exports = (() => {
                             ui: deepMerge(defaultSettings.ui || {}, loadedSettings.ui || {}),
                             advanced: deepMerge(defaultSettings.advanced || {}, loadedSettings.advanced || {})
                         };
+
+                        // Совместимость ключей очистки
+                        if (!mergedSettings.messageFormats.commands.clearOne && mergedSettings.messageFormats.commands.clear1) {
+                            mergedSettings.messageFormats.commands.clearOne = mergedSettings.messageFormats.commands.clear1;
+                        }
+                        if (!mergedSettings.messageFormats.commands.clearMember && mergedSettings.messageFormats.commands.clearUser) {
+                            mergedSettings.messageFormats.commands.clearMember = mergedSettings.messageFormats.commands.clearUser;
+                        }
 
                         // Загружаем кастомные правила
                         const customRules = loadedConfig.customRules || defaultConfig.customRules;
@@ -400,16 +417,17 @@ module.exports = (() => {
 
             onStart() {
                 try {
+                    this.showChangelogIfNeeded();
                     this.MessageActions = BdApi.Webpack.getModule(m => m?.sendMessage && m?.receiveMessage);
                     this.ChannelStore = BdApi.Webpack.getModule(m => m?.getChannel && m?.getDMFromUserId);
 
                     if (!this.MessageActions) {
-                        BdApi.UI.showToast("Ошибка: MessageActions не найден", {type: "error"});
+                        this.showToast("Ошибка: MessageActions не найден", "error");
                         console.error("MessageActions module not found");
                     }
 
                     if (!this.ChannelStore) {
-                        BdApi.UI.showToast("Ошибка: ChannelStore не найден", {type: "error"});
+                        this.showToast("Ошибка: ChannelStore не найден", "error");
                         console.error("ChannelStore module not found");
                     }
 
@@ -417,13 +435,19 @@ module.exports = (() => {
                         this.contextMenuPatch();
                         this.contextMenuPatch = null;
                     }
+                    if (this.messageMenuPatches && this.messageMenuPatches.length) {
+                        this.messageMenuPatches.forEach(unpatch => {
+                            try { unpatch(); } catch (e) {}
+                        });
+                        this.messageMenuPatches = [];
+                    }
 
                     this.contextMenuPatch = BdApi.ContextMenu.patch("user-context", (returnValue, props) => {
                         try {
                             const { user } = props;
                             if (!user) return;
 
-                            const children = returnValue?.props?.children;
+                            const children = this.getMenuChildren(returnValue);
                             if (!Array.isArray(children)) return;
 
                             const exists = children.some(child =>
@@ -432,80 +456,7 @@ module.exports = (() => {
 
                             if (exists) return;
 
-                            const categoryItems = Object.keys(this.rules).map(categoryKey => {
-                                const category = this.rules[categoryKey];
-                                const ruleItems = Object.keys(category.rules).map(ruleId => {
-                                    const rule = category.rules[ruleId];
-                                    const punishmentItems = rule.punishments.map((punishment, idx) => ({
-                                        type: "item",
-                                        label: punishment.name,
-                                        id: `punishment-${ruleId}-${idx}`,
-                                        action: () => this.executePunishment(user, ruleId, punishment.name)
-                                    }));
-
-                                    return {
-                                        type: "submenu",
-                                        label: rule.text,
-                                        id: `rule-${categoryKey}-${ruleId}`,
-                                        items: punishmentItems
-                                    };
-                                });
-
-                                return {
-                                    type: "submenu",
-                                    label: category.name,
-                                    id: `category-${categoryKey}`,
-                                    items: ruleItems
-                                };
-                            });
-
-                            // Добавляем инструменты модерации
-                            const toolsMenuItem = {
-                                type: "submenu",
-                                label: "🔧 Инструменты модерации",
-                                id: "khabarovsk-moderation-tools",
-                                items: [
-                                    {
-                                        type: "item",
-                                        label: "Проверка пользователя",
-                                        id: "khabarovsk-tool-user",
-                                        action: () => {
-                                            // Используем формат команды из настроек, как для других команд (строка 430)
-                                            if (!this.settings.messageFormats?.commands?.user) {
-                                                this.showToast("Формат команды /user не найден в настройках", "error");
-                                                return;
-                                            }
-
-                                            const commandContent = this.settings.messageFormats.commands.user
-                                                .replace("{userId}", user.id);
-
-                                            // Копируем команду в буфер, как в основном плагине (строка 456)
-                                            this.insertTextIntoChat(commandContent);
-                                        }
-                                    },
-                                    {
-                                        type: "item",
-                                        label: "Punish",
-                                        id: "khabarovsk-tool-punish",
-                                        action: () => {
-                                            // Используем формат команды из настроек, как для других команд (строка 430)
-                                            if (!this.settings.messageFormats?.commands?.punish) {
-                                                this.showToast("Формат команды /punish не найден в настройках", "error");
-                                                return;
-                                            }
-
-                                            const commandContent = this.settings.messageFormats.commands.punish
-                                                .replace("{userId}", user.id);
-
-                                            // Копируем команду в буфер, как в основном плагине (строка 456)
-                                            this.insertTextIntoChat(commandContent);
-                                        }
-                                    }
-                                ]
-                            };
-
-                            // Объединяем категории правил и инструменты
-                            const allItems = [...categoryItems, toolsMenuItem];
+                            const allItems = this.buildModerationMenuItems(user, null);
 
                             const moderationMenuItem = BdApi.ContextMenu.buildItem({
                                 type: "submenu",
@@ -520,10 +471,72 @@ module.exports = (() => {
                         }
                     });
 
-                    BdApi.UI.showToast("khabarovskMod запущен", {type: "success"});
+                    const messagePatch = BdApi.ContextMenu.patch("message", (returnValue, props) => {
+                        try {
+                            const message = this.getMessageFromProps(props);
+                            const user = message?.author;
+                            if (!user) return;
+
+                            const children = this.getMenuChildren(returnValue);
+                            if (!Array.isArray(children)) return;
+
+                            const exists = children.some(child =>
+                                child?.props?.id === "khabarovsk-moderation-main"
+                            );
+                            if (exists) return;
+
+                            const messageId = message?.id || message?.message?.id;
+                            const allItems = this.buildModerationMenuItems(user, messageId);
+
+                            const moderationMenuItem = BdApi.ContextMenu.buildItem({
+                                type: "submenu",
+                                label: "Модерация",
+                                id: "khabarovsk-moderation-main",
+                                items: allItems
+                            });
+
+                            children.push(moderationMenuItem);
+                        } catch (error) {
+                            console.error("khabarovskMod message patch error:", error);
+                        }
+                    });
+                    this.messageMenuPatches.push(messagePatch);
+
+                    const messageContextPatch = BdApi.ContextMenu.patch("message-context", (returnValue, props) => {
+                        try {
+                            const message = this.getMessageFromProps(props);
+                            const user = message?.author;
+                            if (!user) return;
+
+                            const children = this.getMenuChildren(returnValue);
+                            if (!Array.isArray(children)) return;
+
+                            const exists = children.some(child =>
+                                child?.props?.id === "khabarovsk-moderation-main"
+                            );
+                            if (exists) return;
+
+                            const messageId = message?.id || message?.message?.id;
+                            const allItems = this.buildModerationMenuItems(user, messageId);
+
+                            const moderationMenuItem = BdApi.ContextMenu.buildItem({
+                                type: "submenu",
+                                label: "Модерация",
+                                id: "khabarovsk-moderation-main",
+                                items: allItems
+                            });
+
+                            children.push(moderationMenuItem);
+                        } catch (error) {
+                            console.error("khabarovskMod message-context patch error:", error);
+                        }
+                    });
+                    this.messageMenuPatches.push(messageContextPatch);
+
+                    this.showToast("khabarovskMod запущен", "success");
                 } catch (error) {
                     console.error("khabarovskMod start error:", error);
-                    BdApi.UI.showToast(`Ошибка запуска: ${error.message}`, {type: "error"});
+                    this.showToast(`Ошибка запуска: ${error.message}`, "error");
                 }
             }
 
@@ -532,7 +545,300 @@ module.exports = (() => {
                     this.contextMenuPatch();
                     this.contextMenuPatch = null;
                 }
-                BdApi.UI.showToast("khabarovskMod остановлен", {type: "info"});
+                if (this.messageMenuPatches && this.messageMenuPatches.length) {
+                    this.messageMenuPatches.forEach(unpatch => {
+                        try { unpatch(); } catch (e) {}
+                    });
+                    this.messageMenuPatches = [];
+                }
+                this.showToast("khabarovskMod остановлен", "info");
+            }
+
+            getMessageFromProps(props) {
+                if (!props) return null;
+                return (
+                    props.message ||
+                    props.message?.message ||
+                    props?.targetMessage ||
+                    props?.targetMessage?.message ||
+                    null
+                );
+            }
+
+            formatDate(date) {
+                const d = String(date.getDate()).padStart(2, "0");
+                const m = String(date.getMonth() + 1).padStart(2, "0");
+                const y = date.getFullYear();
+                return `${d}.${m}.${y}`;
+            }
+
+            getUserTag(user) {
+                if (!user) return "Unknown";
+                if (typeof user.tag === "string" && user.tag.includes("#")) {
+                    return user.tag;
+                }
+                if (user.username && user.discriminator && user.discriminator !== "0") {
+                    return `${user.username}#${user.discriminator}`;
+                }
+                return user.username || `ID${user.id || "0"}`;
+            }
+
+            buildPunishmentForm(typeKey, user, ruleIdOverride = null) {
+                const formConfig = this.settings?.formConfig || {};
+                const template = formConfig.template || "";
+                if (!template) return "";
+
+                const now = new Date();
+                const dateIssued = this.formatDate(now);
+
+                let dateEnd = "";
+                if (typeKey === "mute") {
+                    const minutes = parseInt(this.settings?.commandSettings?.defaultMuteTime || 90, 10);
+                    const end = new Date(now.getTime() + minutes * 60 * 1000);
+                    dateEnd = this.formatDate(end);
+                } else if (typeKey === "ban") {
+                    const days = parseInt(this.settings?.commandSettings?.defaultBanTime || 7, 10);
+                    const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+                    dateEnd = this.formatDate(end);
+                } else {
+                    dateEnd = dateIssued;
+                }
+
+                const ruleId = ruleIdOverride || "____";
+                const userTag = this.getUserTag(user);
+                const moderatorNick = formConfig.moderatorNick || "Ваш_Nick_Name";
+                const punishmentLabel = typeKey === "oralWarning"
+                    ? "Устное предупреждение"
+                    : typeKey === "warning"
+                        ? "Предупреждение"
+                        : typeKey === "mute"
+                            ? "Мут"
+                            : "Бан";
+
+                return template
+                    .replaceAll("{userId}", user.id)
+                    .replaceAll("{userTag}", userTag)
+                    .replaceAll("{ruleId}", ruleId)
+                    .replaceAll("{punishment}", punishmentLabel)
+                    .replaceAll("{moderatorNick}", moderatorNick)
+                    .replaceAll("{dateIssued}", dateIssued)
+                    .replaceAll("{dateEnd}", dateEnd);
+            }
+
+            getMenuChildren(returnValue) {
+                if (!returnValue || !returnValue.props) return null;
+                const children = returnValue.props.children;
+                if (Array.isArray(children)) return children;
+                if (children && Array.isArray(children.props?.children)) return children.props.children;
+                return null;
+            }
+
+            buildModerationMenuItems(user, messageId) {
+                const categoryItems = Object.keys(this.rules).map(categoryKey => {
+                    const category = this.rules[categoryKey];
+                    const ruleItems = Object.keys(category.rules).map(ruleId => {
+                        const rule = category.rules[ruleId];
+                        const punishmentItems = rule.punishments.map((punishment, idx) => ({
+                            type: "item",
+                            label: punishment.name,
+                            id: `punishment-${ruleId}-${idx}`,
+                            action: () => this.executePunishment(user, ruleId, punishment.name)
+                        }));
+
+                        return {
+                            type: "submenu",
+                            label: rule.text,
+                            id: `rule-${categoryKey}-${ruleId}`,
+                            items: punishmentItems
+                        };
+                    });
+
+                    return {
+                        type: "submenu",
+                        label: category.name,
+                        id: `category-${categoryKey}`,
+                        items: ruleItems
+                    };
+                });
+
+                const toolsItems = [
+                    {
+                        type: "item",
+                        label: "Проверка пользователя",
+                        id: "khabarovsk-tool-user",
+                        action: () => {
+                            if (!this.settings.messageFormats?.commands?.user) {
+                                this.showToast("Формат команды /user не найден в настройках", "error");
+                                return;
+                            }
+                            const commandContent = this.settings.messageFormats.commands.user
+                                .replace("{userId}", user.id);
+                            this.queueActionWithPreview(
+                                "Инструмент /user",
+                                `Команда: ${commandContent}`,
+                                () => this.insertTextIntoChat(commandContent)
+                            );
+                        }
+                    },
+                    {
+                        type: "item",
+                        label: "Punish",
+                        id: "khabarovsk-tool-punish",
+                        action: () => {
+                            if (!this.settings.messageFormats?.commands?.punish) {
+                                this.showToast("Формат команды /punish не найден в настройках", "error");
+                                return;
+                            }
+                            const commandContent = this.settings.messageFormats.commands.punish
+                                .replace("{userId}", user.id);
+                            this.queueActionWithPreview(
+                                "Инструмент /punish",
+                                `Команда: ${commandContent}`,
+                                () => this.insertTextIntoChat(commandContent)
+                            );
+                        }
+                    }
+                ];
+
+                const formsItems = [
+                    {
+                        type: "item",
+                        label: "Устное предупреждение",
+                        id: "khabarovsk-form-oral",
+                        action: () => {
+                            const text = this.buildPunishmentForm("oralWarning", user);
+                            if (!text) {
+                                this.showToast("Форма устного предупреждения не настроена", "error");
+                                return;
+                            }
+                            this.queueActionWithPreview(
+                                "Форма наказания: Устное предупреждение",
+                                text,
+                                () => this.insertTextIntoChat(text)
+                            );
+                        }
+                    },
+                    {
+                        type: "item",
+                        label: "Предупреждение",
+                        id: "khabarovsk-form-warning",
+                        action: () => {
+                            const text = this.buildPunishmentForm("warning", user);
+                            if (!text) {
+                                this.showToast("Форма предупреждения не настроена", "error");
+                                return;
+                            }
+                            this.queueActionWithPreview(
+                                "Форма наказания: Предупреждение",
+                                text,
+                                () => this.insertTextIntoChat(text)
+                            );
+                        }
+                    },
+                    {
+                        type: "item",
+                        label: "Мут",
+                        id: "khabarovsk-form-mute",
+                        action: () => {
+                            const text = this.buildPunishmentForm("mute", user);
+                            if (!text) {
+                                this.showToast("Форма мута не настроена", "error");
+                                return;
+                            }
+                            this.queueActionWithPreview(
+                                "Форма наказания: Мут",
+                                text,
+                                () => this.insertTextIntoChat(text)
+                            );
+                        }
+                    },
+                    {
+                        type: "item",
+                        label: "Бан",
+                        id: "khabarovsk-form-ban",
+                        action: () => {
+                            const text = this.buildPunishmentForm("ban", user);
+                            if (!text) {
+                                this.showToast("Форма бана не настроена", "error");
+                                return;
+                            }
+                            this.queueActionWithPreview(
+                                "Форма наказания: Бан",
+                                text,
+                                () => this.insertTextIntoChat(text)
+                            );
+                        }
+                    }
+                ];
+
+                if (formsItems.length) {
+                    toolsItems.push({
+                        type: "submenu",
+                        label: "📝 Формы наказаний",
+                        id: "khabarovsk-punishment-forms",
+                        items: formsItems
+                    });
+                }
+
+                const cleanupItems = [];
+                if (messageId) {
+                    cleanupItems.push({
+                        type: "item",
+                        label: "Очистить сообщение",
+                        id: "khabarovsk-clear-one",
+                        action: () => {
+                            const clearOne = this.settings.messageFormats?.commands?.clearOne || this.settings.messageFormats?.commands?.clear1;
+                            if (!clearOne) {
+                                this.showToast("Формат команды clear one не найден в настройках", "error");
+                                return;
+                            }
+                            const commandContent = clearOne
+                                .replace("{messageId}", messageId)
+                                .replace("{userId}", user.id);
+                            this.queueActionWithPreview(
+                                "Очистка сообщения",
+                                `Команда: ${commandContent}`,
+                                () => this.insertTextIntoChat(commandContent)
+                            );
+                        }
+                    });
+                }
+                cleanupItems.push({
+                    type: "item",
+                    label: "Очистить сообщения пользователя",
+                    id: "khabarovsk-clear-member",
+                    action: () => {
+                        if (!this.settings.messageFormats?.commands?.clearMember) {
+                            this.showToast("Формат команды clear member не найден в настройках", "error");
+                            return;
+                        }
+                        const commandContent = this.settings.messageFormats.commands.clearMember
+                            .replace("{userId}", user.id);
+                        this.queueActionWithPreview(
+                            "Очистка сообщений пользователя",
+                            `Команда: ${commandContent}`,
+                            () => this.insertTextIntoChat(commandContent)
+                        );
+                    }
+                });
+
+                if (cleanupItems.length) {
+                    toolsItems.push({
+                        type: "submenu",
+                        label: "🧹 Очистка",
+                        id: "khabarovsk-tool-cleanup",
+                        items: cleanupItems
+                    });
+                }
+
+                const toolsMenuItem = {
+                    type: "submenu",
+                    label: "🔧 Инструменты модерации",
+                    id: "khabarovsk-moderation-tools",
+                    items: toolsItems
+                };
+
+                return [...categoryItems, toolsMenuItem];
             }
 
             getSettingsPanel() {
@@ -661,6 +967,45 @@ module.exports = (() => {
                     return { container, input };
                 };
 
+                const createTextareaField = (labelText, value, hintText, placeholder = "") => {
+                    const container = document.createElement("div");
+                    container.style.marginBottom = "20px";
+
+                    const label = document.createElement("label");
+                    label.textContent = labelText;
+                    label.style.display = "block";
+                    label.style.marginBottom = "8px";
+                    label.style.color = "#B9BBBE";
+                    label.style.fontSize = "14px";
+                    label.style.fontWeight = "500";
+                    container.appendChild(label);
+
+                    const textarea = document.createElement("textarea");
+                    textarea.value = value || "";
+                    textarea.placeholder = placeholder;
+                    textarea.style.width = "100%";
+                    textarea.style.minHeight = "90px";
+                    textarea.style.padding = "10px 12px";
+                    textarea.style.marginBottom = "6px";
+                    textarea.style.backgroundColor = "rgba(4, 4, 5, 0.3)";
+                    textarea.style.border = "1px solid rgba(79, 84, 92, 0.5)";
+                    textarea.style.borderRadius = "4px";
+                    textarea.style.color = "#FFFFFF";
+                    textarea.style.fontSize = "14px";
+                    textarea.style.resize = "vertical";
+                    container.appendChild(textarea);
+
+                    if (hintText) {
+                        const hint = document.createElement("div");
+                        hint.textContent = hintText;
+                        hint.style.fontSize = "12px";
+                        hint.style.color = "#72767D";
+                        container.appendChild(hint);
+                    }
+
+                    return { container, input: textarea };
+                };
+
                 // Секция: Форматы сообщений (раскрывающаяся)
                 const formatsSection = createCollapsibleSection("Форматы сообщений", "💬", true);
 
@@ -725,7 +1070,51 @@ module.exports = (() => {
                 );
                 commandsSection.content.appendChild(punishField.container);
 
+                const clearOneField = createInputField(
+                    "Команда clear one (по ID сообщения):",
+                    this.settings.messageFormats?.commands?.clearOne || this.settings.messageFormats?.commands?.clear1 || "/clear one message_Id:<@{messageId}>",
+                    "Доступные переменные: {messageId}, {userId}"
+                );
+                commandsSection.content.appendChild(clearOneField.container);
+
+                const clearMemberField = createInputField(
+                    "Команда clear member (по пользователю):",
+                    this.settings.messageFormats?.commands?.clearMember || this.settings.messageFormats?.commands?.clearUser || "/clear member user:<@{userId}>",
+                    "Доступная переменная: {userId}"
+                );
+                commandsSection.content.appendChild(clearMemberField.container);
+
                 panel.appendChild(commandsSection.wrapper);
+
+                // Секция: Конфигурация форм (раскрывающаяся)
+                const formsSection = createCollapsibleSection("Конфигурация форм", "📝", false);
+
+                const moderatorNickField = createInputField(
+                    "Ваш Nick_Name (модератор):",
+                    this.settings.formConfig?.moderatorNick || "Ваш_Nick_Name",
+                    "Подставляется в шаблон как {moderatorNick}"
+                );
+                formsSection.content.appendChild(moderatorNickField.container);
+
+                const formTemplateField = createTextareaField(
+                    "Шаблон формы наказания:",
+                    this.settings.formConfig?.template || "",
+                    "Переменные: {moderatorNick}, {userId}, {userTag}, {ruleId}, {punishment}, {dateIssued}, {dateEnd}"
+                );
+                formsSection.content.appendChild(formTemplateField.container);
+
+                const variablesHint = document.createElement("div");
+                variablesHint.style.marginTop = "10px";
+                variablesHint.style.padding = "10px";
+                variablesHint.style.background = "rgba(79, 84, 92, 0.2)";
+                variablesHint.style.border = "1px solid rgba(79, 84, 92, 0.35)";
+                variablesHint.style.borderRadius = "6px";
+                variablesHint.style.color = "#B9BBBE";
+                variablesHint.style.fontSize = "12px";
+                variablesHint.textContent = "Доступные переменные: {moderatorNick}, {userId}, {userTag}, {ruleId}, {punishment}, {dateIssued}, {dateEnd}";
+                formsSection.content.appendChild(variablesHint);
+
+                panel.appendChild(formsSection.wrapper);
 
                 // Секция: Категории наказаний (раскрывающаяся)
                 const punishmentsSection = createCollapsibleSection("Категории наказаний", "⚖️", false);
@@ -855,20 +1244,14 @@ module.exports = (() => {
                 );
                 advancedSection.content.appendChild(showPreviewToggle.container);
 
-                const enableShortcutsToggle = createToggle(
-                    "Горячие клавиши",
-                    this.settings.advanced?.enableShortcuts === true,
-                    "Включить поддержку горячих клавиш"
-                );
-                advancedSection.content.appendChild(enableShortcutsToggle.container);
-
                 // Если автосохранение включено, добавляем обработчики
                 if (this.settings.autoSave) {
                     const allInputs = [
                         withTextField.input, onlyMentionField.input,
                         warnField.input, muteField.input, banField.input, permbanField.input,
-                        userField.input, punishField.input,
-                        withTextField2.input, withTextAndCopyField.input, withCopyField.input
+                        userField.input, punishField.input, clearOneField.input, clearMemberField.input,
+                        withTextField2.input, withTextAndCopyField.input, withCopyField.input,
+                        moderatorNickField.input, formTemplateField.input
                     ];
 
                     allInputs.forEach(input => {
@@ -1036,11 +1419,18 @@ module.exports = (() => {
                         this.settings.messageFormats.commands.permban = permbanField.input.value.trim();
                         this.settings.messageFormats.commands.user = userField.input.value.trim();
                         this.settings.messageFormats.commands.punish = punishField.input.value.trim();
+                        this.settings.messageFormats.commands.clearOne = clearOneField.input.value.trim();
+                        this.settings.messageFormats.commands.clearMember = clearMemberField.input.value.trim();
 
                         // Сохраняем категории наказаний
                         this.settings.punishmentsWithText = withTextField2.input.value.split(",").map(s => s.trim()).filter(s => s);
                         this.settings.punishmentsWithTextAndCopy = withTextAndCopyField.input.value.split(",").map(s => s.trim()).filter(s => s);
                         this.settings.punishmentsWithCopy = withCopyField.input.value.split(",").map(s => s.trim()).filter(s => s);
+
+                        // Сохраняем конфигурацию форм
+                        if (!this.settings.formConfig) this.settings.formConfig = {};
+                        this.settings.formConfig.moderatorNick = moderatorNickField.input.value.trim();
+                        this.settings.formConfig.template = formTemplateField.input.value.trim();
 
                         // Сохраняем дополнительные настройки
                         this.settings.showNotifications = showNotificationsToggle.toggle.getValue();
@@ -1050,7 +1440,6 @@ module.exports = (() => {
                         if (!this.settings.advanced) this.settings.advanced = {};
                         this.settings.advanced.confirmActions = confirmActionsToggle.toggle.getValue();
                         this.settings.advanced.showPreview = showPreviewToggle.toggle.getValue();
-                        this.settings.advanced.enableShortcuts = enableShortcutsToggle.toggle.getValue();
 
                         // Сохраняем настройки команд
                         if (!this.settings.commandSettings) this.settings.commandSettings = {};
@@ -1077,10 +1466,10 @@ module.exports = (() => {
                         this.settings.ui.showIcons = showIconsToggle.toggle.getValue();
 
                         this.saveSettings(this.settings);
-                        BdApi.UI.showToast("✅ Настройки успешно сохранены!", {type: "success"});
+                        this.showToast("✅ Настройки успешно сохранены!", "success");
                     } catch (error) {
                         console.error("Ошибка сохранения настроек:", error);
-                        BdApi.UI.showToast("❌ Ошибка сохранения: " + error.message, {type: "error"});
+                        this.showToast("❌ Ошибка сохранения: " + error.message, "error");
                     }
                 };
 
@@ -1104,7 +1493,7 @@ module.exports = (() => {
                         // Перезагружаем панель
                         const newPanel = this.getSettingsPanel();
                         panel.parentNode.replaceChild(newPanel, panel);
-                        BdApi.UI.showToast("⚙️ Настройки сброшены к умолчаниям", {type: "info"});
+                        this.showToast("⚙️ Настройки сброшены к умолчаниям", "info");
                     }
                 };
 
@@ -1125,10 +1514,10 @@ module.exports = (() => {
                 openButton.onclick = () => {
                     try {
                         require("electron").shell.openPath(this.configPath);
-                        BdApi.UI.showToast("📂 Открываю конфиг-файл...", {type: "info"});
+                        this.showToast("📂 Открываю конфиг-файл...", "info");
                     } catch (error) {
                         console.error("Ошибка открытия файла:", error);
-                        BdApi.UI.showToast("❌ Ошибка открытия файла: " + error.message, {type: "error"});
+                        this.showToast("❌ Ошибка открытия файла: " + error.message, "error");
                     }
                 };
 
@@ -1143,12 +1532,12 @@ module.exports = (() => {
             getCurrentChannelId() {
                 const SelectedChannelStore = BdApi.Webpack.getModule(m => m?.getChannelId && m?.getLastSelectedChannelId);
                 if (!SelectedChannelStore) {
-                    BdApi.UI.showToast("SelectedChannelStore не найден", {type: "error"});
+                    this.showToast("SelectedChannelStore не найден", "error");
                     return null;
                 }
                 const channelId = SelectedChannelStore.getChannelId();
                 if (!channelId) {
-                    BdApi.UI.showToast("ID канала не найден", {type: "error"});
+                    this.showToast("ID канала не найден", "error");
                     return null;
                 }
                 return channelId;
@@ -1156,7 +1545,7 @@ module.exports = (() => {
 
             sendMessageToChannel(channelId, messageContent) {
                 if (!this.MessageActions) {
-                    BdApi.UI.showToast("MessageActions не загружен", {type: "error"});
+                    this.showToast("MessageActions не загружен", "error");
                     return;
                 }
                 this.MessageActions.sendMessage(channelId, {
@@ -1199,10 +1588,14 @@ module.exports = (() => {
                             .replace("{punishment}", punishment)
                             .replace("{ruleId}", ruleId);
 
-                        // Отправляем сообщение
-                        this.sendMessageToChannel(channelId, messageContent);
-
-                        this.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, "success");
+                        this.queueActionWithPreview(
+                            "Подтверждение наказания",
+                            `Сообщение: ${messageContent}`,
+                            () => {
+                                this.sendMessageToChannel(channelId, messageContent);
+                                this.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, "success");
+                            }
+                        );
                     } else if (this.settings.punishmentsWithTextAndCopy.includes(punishment)) {
                         const channelId = this.getCurrentChannelId();
                         if (!channelId) return;
@@ -1223,12 +1616,16 @@ module.exports = (() => {
                             .replace("{userId}", user.id)
                             .replace("{ruleId}", ruleId);
 
-                        this.insertTextIntoChat(commandContent);
-
-                        // Отправляем сообщение
-                        this.sendMessageToChannel(channelId, messageContent);
-
-                        this.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, "success");
+                        const preview = `Команда: ${commandContent}\nСообщение: ${messageContent}`;
+                        this.queueActionWithPreview(
+                            "Подтверждение наказания",
+                            preview,
+                            () => {
+                                this.insertTextIntoChat(commandContent);
+                                this.sendMessageToChannel(channelId, messageContent);
+                                this.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, "success");
+                            }
+                        );
                     } else if (this.settings.punishmentsWithCopy.includes(punishment)) {
                         // Проверяем наличие команд перед использованием
                         if (punishment === "Мут 90 минут") {
@@ -1258,7 +1655,11 @@ module.exports = (() => {
                         }
 
                         if (commandContent) {
-                            this.insertTextIntoChat(commandContent);
+                            this.queueActionWithPreview(
+                                "Подтверждение команды",
+                                `Команда: ${commandContent}`,
+                                () => this.insertTextIntoChat(commandContent)
+                            );
                         }
                     } else {
                         // Для остальных наказаний - копируем информацию в буфер
@@ -1267,7 +1668,11 @@ module.exports = (() => {
                             .replace("{ruleId}", ruleId)
                             .replace("{punishment}", punishment);
 
-                        this.insertTextIntoChat(messageContent);
+                        this.queueActionWithPreview(
+                            "Подтверждение действия",
+                            `Сообщение: ${messageContent}`,
+                            () => this.insertTextIntoChat(messageContent)
+                        );
                     }
 
                 } catch (error) {
@@ -1279,6 +1684,44 @@ module.exports = (() => {
             showToast(message, type = "info") {
                 if (this.settings.showNotifications !== false) {
                     BdApi.UI.showToast(message, {type: type});
+                }
+            }
+
+            queueActionWithPreview(title, previewText, action) {
+                const confirmActions = this.settings?.advanced?.confirmActions === true;
+                const showPreview = this.settings?.advanced?.showPreview !== false;
+
+                if (!confirmActions && !showPreview) {
+                    action();
+                    return;
+                }
+
+                const confirmText = confirmActions ? "Выполнить" : "Продолжить";
+                BdApi.UI.showConfirmationModal(
+                    title || "Подтверждение",
+                    previewText || "Подтвердите действие",
+                    {
+                        confirmText,
+                        cancelText: "Отмена",
+                        onConfirm: () => action()
+                    }
+                );
+            }
+
+            showChangelogIfNeeded() {
+                try {
+                    const lastVersion = BdApi.Data.load(config.info.name, "lastVersion");
+                    if (lastVersion !== config.info.version) {
+                        BdApi.UI.showChangelogModal({
+                            title: config.info.name,
+                            subtitle: `v${config.info.version}`,
+                            blurb: "Список изменений текущего обновления",
+                            changes: config.changelog || []
+                        });
+                        BdApi.Data.save(config.info.name, "lastVersion", config.info.version);
+                    }
+                } catch (error) {
+                    console.error("Ошибка показа changelog:", error);
                 }
             }
 
