@@ -93,6 +93,10 @@ module.exports = (() => {
                 this.messageMenuPatches = [];
                 this.MessageActions = null;
                 this.ChannelStore = null;
+                this._ruleOptionsCache = null;
+                this._ruleOptionsHash = null;
+                this._formTemplateCache = null;
+                this._formTemplateRaw = null;
                 this.configPath = path.join(BdApi.Plugins.folder, "khabarovskMod.config.json");
                 this.settings = this.loadSettings();
                 this.defaultRules = {
@@ -180,6 +184,9 @@ module.exports = (() => {
                     console.error("Ошибка загрузки кастомных правил:", error);
                 }
 
+                // Сброс кэша правил при изменении
+                this._ruleOptionsCache = null;
+                this._ruleOptionsHash = null;
                 return rules;
             }
 
@@ -194,7 +201,7 @@ module.exports = (() => {
                             permban: "/ban user:<@{userId}> time:365 reason:{ruleId}",
                             user: "/user user:<@{userId}>",
                             punish: "/punish user:<@{userId}>",
-                            clearOne: "/clear one message_Id:<@{messageId}>",
+                            clearOne: "/clear one message_id:{messageId}",
                             clearMember: "/clear member user:<@{userId}>"
                         },
                         onlyMention: "<@{userId}>"
@@ -615,6 +622,11 @@ module.exports = (() => {
                 const template = formConfig.template || "";
                 if (!template) return "";
 
+                if (this._formTemplateRaw !== template) {
+                    this._formTemplateRaw = template;
+                    this._formTemplateCache = template;
+                }
+
                 const now = new Date();
                 const dateIssued = dateIssuedOverride || this.formatDate(now);
 
@@ -645,7 +657,7 @@ module.exports = (() => {
                             ? "Мут"
                             : "Бан";
 
-                return template
+                return this._formTemplateCache
                     .replaceAll("{userId}", user.id)
                     .replaceAll("{userTag}", userTag)
                     .replaceAll("{ruleId}", ruleId)
@@ -855,17 +867,49 @@ module.exports = (() => {
                             color: "#FFFFFF",
                             cursor: "pointer"
                         }
-                    }, "Экспорт JSON")
+                    }, "Экспорт JSON"),
+                    React.createElement("button", {
+                        onClick: () => {
+                            BdApi.UI.showConfirmationModal(
+                                "Очистить историю?",
+                                "Это действие удалит все записи. Продолжить?",
+                                {
+                                    confirmText: "Очистить",
+                                    cancelText: "Отмена",
+                                    onConfirm: () => {
+                                        BdApi.Data.save(config.info.name, "punishmentHistory", []);
+                                        const list = document.getElementById("khab-history-list");
+                                        if (list) {
+                                            list.innerHTML = "";
+                                            const empty = document.createElement("div");
+                                            empty.style.color = "#B9BBBE";
+                                            empty.textContent = "История пуста";
+                                            list.appendChild(empty);
+                                        }
+                                    }
+                                }
+                            );
+                        },
+                        style: {
+                            padding: "6px 12px",
+                            borderRadius: "4px",
+                            border: "1px solid #4E5058",
+                            background: "#2F3136",
+                            color: "#FFFFFF",
+                            cursor: "pointer"
+                        }
+                    }, "Очистить всё")
                 );
 
                 BdApi.UI.showConfirmationModal(
                     "История наказаний",
-                    React.createElement("div", null, ...items),
-                    { confirmText: "Закрыть", cancelText: "Очистить всё",
-                      onCancel: () => {
-                          BdApi.Data.save(config.info.name, "punishmentHistory", []);
-                      },
-                      footer: footer }
+                    React.createElement(
+                        "div",
+                        null,
+                        React.createElement("div", { id: "khab-history-list" }, ...items),
+                        footer
+                    ),
+                    { confirmText: "Закрыть", cancelText: "Отмена" }
                 );
             }
 
@@ -878,9 +922,14 @@ module.exports = (() => {
             }
 
             getRuleOptions() {
+                const rules = this.rules || {};
+                const hash = JSON.stringify(rules);
+                if (this._ruleOptionsCache && this._ruleOptionsHash === hash) {
+                    return this._ruleOptionsCache;
+                }
                 const options = [];
-                Object.keys(this.rules || {}).forEach(categoryKey => {
-                    const category = this.rules[categoryKey];
+                Object.keys(rules).forEach(categoryKey => {
+                    const category = rules[categoryKey];
                     Object.keys(category.rules || {}).forEach(ruleId => {
                         const rule = category.rules[ruleId];
                         options.push({
@@ -889,6 +938,8 @@ module.exports = (() => {
                         });
                     });
                 });
+                this._ruleOptionsCache = options;
+                this._ruleOptionsHash = hash;
                 return options;
             }
 
@@ -1061,7 +1112,7 @@ module.exports = (() => {
                 const toolsItems = [
                     {
                         type: "item",
-                        label: "Проверка пользователя",
+                        label: "🔍 Проверка пользователя",
                         id: "khabarovsk-tool-user",
                         action: () => {
                             if (!this.settings.messageFormats?.commands?.user) {
@@ -1079,7 +1130,7 @@ module.exports = (() => {
                     },
                     {
                         type: "item",
-                        label: "Punish",
+                        label: "⚖️ Punish",
                         id: "khabarovsk-tool-punish",
                         action: () => {
                             if (!this.settings.messageFormats?.commands?.punish) {
@@ -1152,7 +1203,7 @@ module.exports = (() => {
                 if (messageId) {
                     cleanupItems.push({
                         type: "item",
-                        label: "Очистить сообщение",
+                        label: "🧹 Очистить сообщение",
                         id: "khabarovsk-clear-one",
                         action: () => {
                             const clearOne = this.settings.messageFormats?.commands?.clearOne || this.settings.messageFormats?.commands?.clear1;
@@ -1173,7 +1224,7 @@ module.exports = (() => {
                 }
                 cleanupItems.push({
                     type: "item",
-                    label: "Очистить сообщения пользователя",
+                    label: "🧹 Очистить сообщения пользователя",
                     id: "khabarovsk-clear-member",
                     action: () => {
                         if (!this.settings.messageFormats?.commands?.clearMember) {
@@ -1440,7 +1491,7 @@ module.exports = (() => {
 
                 const clearOneField = createInputField(
                     "Команда clear one (по ID сообщения):",
-                    this.settings.messageFormats?.commands?.clearOne || this.settings.messageFormats?.commands?.clear1 || "/clear one message_Id:<@{messageId}>",
+                    this.settings.messageFormats?.commands?.clearOne || this.settings.messageFormats?.commands?.clear1 || "/clear one message_id:{messageId}",
                     "Доступные переменные: {messageId}, {userId}"
                 );
                 commandsSection.content.appendChild(clearOneField.container);
