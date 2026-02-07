@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 1.1.1
+ * @version 1.1.1a
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://raw.githubusercontent.com/Jeredpoi/khabarovskMod/main/khabarovskMod.plugin.js
@@ -12,7 +12,7 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "1.1.1",
+            version: "1.1.1a",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
@@ -29,7 +29,7 @@ module.exports = (() => {
                 title: "Исправления",
                 type: "fixed",
                 items: [
-                    "Нет"
+                    "Убраны поля дат для форм устного предупреждения и предупреждения"
                 ]
             }
         ]
@@ -224,7 +224,14 @@ module.exports = (() => {
                         inputPaddingY: 10,
                         inputPaddingX: 12,
                         borderRadius: 8,
-                        accentColor: "#5865F2"
+                        accentColor: "#5865F2",
+                        panelBackground: "#1F2024",
+                        sectionBackground: "rgba(79, 84, 92, 0.3)",
+                        sectionBorderColor: "rgba(79, 84, 92, 0.5)",
+                        inputBackground: "rgba(4, 4, 5, 0.3)",
+                        textColor: "#FFFFFF",
+                        mutedTextColor: "#B9BBBE",
+                        hintTextColor: "#72767D"
                     },
                     advanced: {
                         confirmActions: false,
@@ -351,7 +358,11 @@ module.exports = (() => {
                     const normalizeColor = (value, fallback) => {
                         if (typeof value !== "string") return fallback;
                         const trimmed = value.trim();
-                        return /^#([0-9a-f]{3}){1,2}$/i.test(trimmed) ? trimmed : fallback;
+                        if (/^#([0-9a-f]{3}){1,2}$/i.test(trimmed)) return trimmed;
+                        if (/^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(\s*,\s*(0|0?\.\d+|1(\.0)?))?\s*\)$/i.test(trimmed)) {
+                            return trimmed;
+                        }
+                        return fallback;
                     };
                     const normalizeAnimationSpeed = (value) => {
                         const v = String(value || "").trim().toLowerCase();
@@ -420,7 +431,14 @@ module.exports = (() => {
                                 inputPaddingY: normalizeNumber(uiSettings.inputPaddingY, 10, 4, 18),
                                 inputPaddingX: normalizeNumber(uiSettings.inputPaddingX, 12, 6, 24),
                                 borderRadius: normalizeNumber(uiSettings.borderRadius, 8, 0, 20),
-                                accentColor: normalizeColor(uiSettings.accentColor, "#5865F2")
+                                accentColor: normalizeColor(uiSettings.accentColor, "#5865F2"),
+                                panelBackground: normalizeColor(uiSettings.panelBackground, "#1F2024"),
+                                sectionBackground: normalizeColor(uiSettings.sectionBackground, "rgba(79, 84, 92, 0.3)"),
+                                sectionBorderColor: normalizeColor(uiSettings.sectionBorderColor, "rgba(79, 84, 92, 0.5)"),
+                                inputBackground: normalizeColor(uiSettings.inputBackground, "rgba(4, 4, 5, 0.3)"),
+                                textColor: normalizeColor(uiSettings.textColor, "#FFFFFF"),
+                                mutedTextColor: normalizeColor(uiSettings.mutedTextColor, "#B9BBBE"),
+                                hintTextColor: normalizeColor(uiSettings.hintTextColor, "#72767D")
                             },
                             advanced: settings.advanced || {
                                 confirmActions: false,
@@ -638,7 +656,7 @@ module.exports = (() => {
                 }
 
                 const now = new Date();
-                const dateIssued = dateIssuedOverride || this.formatDate(now);
+                let dateIssued = dateIssuedOverride || this.formatDate(now);
 
                 let dateEnd = "";
                 if (typeKey === "mute") {
@@ -654,6 +672,10 @@ module.exports = (() => {
                 }
                 if (dateEndOverride) {
                     dateEnd = dateEndOverride;
+                }
+                if (typeKey === "oralWarning" || typeKey === "warning") {
+                    dateIssued = "";
+                    dateEnd = "";
                 }
 
                 const ruleId = ruleIdOverride || "____";
@@ -968,6 +990,7 @@ module.exports = (() => {
                 const now = new Date();
                 const defaultIssuedISO = this.formatDateISO(now);
                 let defaultEndISO = defaultIssuedISO;
+                const includeDates = typeKey === "mute" || typeKey === "ban";
                 if (typeKey === "mute") {
                     const minutes = parseInt(this.settings?.commandSettings?.defaultMuteTime || 90, 10);
                     defaultEndISO = this.formatDateISO(new Date(now.getTime() + minutes * 60 * 1000));
@@ -1015,44 +1038,6 @@ module.exports = (() => {
                     }
                 );
 
-                const dateIssuedInput = React.createElement(
-                    "input",
-                    {
-                        type: "date",
-                        defaultValue: defaultIssuedISO,
-                        onChange: (e) => { dateIssuedISO = e.target.value; },
-                        style: {
-                            width: "100%",
-                            padding: "8px",
-                            borderRadius: "6px",
-                            border: "1px solid #4E5058",
-                            background: "#2F3136",
-                            color: "#FFFFFF",
-                            fontSize: "14px",
-                            marginTop: "10px"
-                        }
-                    }
-                );
-
-                const dateEndInput = React.createElement(
-                    "input",
-                    {
-                        type: "date",
-                        defaultValue: defaultEndISO,
-                        onChange: (e) => { dateEndISO = e.target.value; },
-                        style: {
-                            width: "100%",
-                            padding: "8px",
-                            borderRadius: "6px",
-                            border: "1px solid #4E5058",
-                            background: "#2F3136",
-                            color: "#FFFFFF",
-                            fontSize: "14px",
-                            marginTop: "10px"
-                        }
-                    }
-                );
-
                 const content = React.createElement(
                     "div",
                     null,
@@ -1060,10 +1045,50 @@ module.exports = (() => {
                     select,
                     React.createElement("div", { style: { marginTop: "10px", color: "#72767D", fontSize: "12px" } }, "Или укажите правило вручную:"),
                     manualInput,
-                    React.createElement("div", { style: { marginTop: "12px", color: "#B9BBBE" } }, "Дата выдачи:"),
-                    dateIssuedInput,
-                    React.createElement("div", { style: { marginTop: "12px", color: "#B9BBBE" } }, "Дата снятия:"),
-                    dateEndInput
+                    includeDates
+                        ? React.createElement(
+                            React.Fragment,
+                            null,
+                            React.createElement("div", { style: { marginTop: "12px", color: "#B9BBBE" } }, "Дата выдачи:"),
+                            React.createElement(
+                                "input",
+                                {
+                                    type: "date",
+                                    defaultValue: defaultIssuedISO,
+                                    onChange: (e) => { dateIssuedISO = e.target.value; },
+                                    style: {
+                                        width: "100%",
+                                        padding: "8px",
+                                        borderRadius: "6px",
+                                        border: "1px solid #4E5058",
+                                        background: "#2F3136",
+                                        color: "#FFFFFF",
+                                        fontSize: "14px",
+                                        marginTop: "10px"
+                                    }
+                                }
+                            ),
+                            React.createElement("div", { style: { marginTop: "12px", color: "#B9BBBE" } }, "Дата снятия:"),
+                            React.createElement(
+                                "input",
+                                {
+                                    type: "date",
+                                    defaultValue: defaultEndISO,
+                                    onChange: (e) => { dateEndISO = e.target.value; },
+                                    style: {
+                                        width: "100%",
+                                        padding: "8px",
+                                        borderRadius: "6px",
+                                        border: "1px solid #4E5058",
+                                        background: "#2F3136",
+                                        color: "#FFFFFF",
+                                        fontSize: "14px",
+                                        marginTop: "10px"
+                                    }
+                                }
+                            )
+                        )
+                        : null
                 );
 
                 BdApi.UI.showConfirmationModal(
@@ -1078,8 +1103,8 @@ module.exports = (() => {
                                 this.showToast("Выберите пункт правил или введите вручную", "error");
                                 return;
                             }
-                            const issued = this.formatDateFromISO(dateIssuedISO || defaultIssuedISO);
-                            const end = this.formatDateFromISO(dateEndISO || defaultEndISO);
+                            const issued = includeDates ? this.formatDateFromISO(dateIssuedISO || defaultIssuedISO) : "";
+                            const end = includeDates ? this.formatDateFromISO(dateEndISO || defaultEndISO) : "";
                             const text = this.buildPunishmentForm(typeKey, user, ruleValue, issued, end);
                             if (!text) {
                                 this.showToast("Форма не настроена", "error");
@@ -1290,7 +1315,14 @@ module.exports = (() => {
                     inputPaddingY: 10,
                     inputPaddingX: 12,
                     borderRadius: 8,
-                    accentColor: "#5865F2"
+                    accentColor: "#5865F2",
+                    panelBackground: "#1F2024",
+                    sectionBackground: "rgba(79, 84, 92, 0.3)",
+                    sectionBorderColor: "rgba(79, 84, 92, 0.5)",
+                    inputBackground: "rgba(4, 4, 5, 0.3)",
+                    textColor: "#FFFFFF",
+                    mutedTextColor: "#B9BBBE",
+                    hintTextColor: "#72767D"
                 };
                 const uiRaw = this.settings.ui || {};
                 const normalizeNumber = (value, fallback, min = null, max = null) => {
@@ -1303,7 +1335,11 @@ module.exports = (() => {
                 const normalizeColor = (value, fallback) => {
                     if (typeof value !== "string") return fallback;
                     const trimmed = value.trim();
-                    return /^#([0-9a-f]{3}){1,2}$/i.test(trimmed) ? trimmed : fallback;
+                    if (/^#([0-9a-f]{3}){1,2}$/i.test(trimmed)) return trimmed;
+                    if (/^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(\s*,\s*(0|0?\.\d+|1(\.0)?))?\s*\)$/i.test(trimmed)) {
+                        return trimmed;
+                    }
+                    return fallback;
                 };
                 const normalizeAnimationSpeed = (value) => {
                     const v = String(value || "").trim().toLowerCase();
@@ -1325,6 +1361,13 @@ module.exports = (() => {
                 const inputPaddingX = normalizeNumber(uiRaw.inputPaddingX, uiDefaults.inputPaddingX, 6, 24);
                 const borderRadius = normalizeNumber(uiRaw.borderRadius, uiDefaults.borderRadius, 0, 20);
                 const accentColor = normalizeColor(uiRaw.accentColor, uiDefaults.accentColor);
+                const panelBackground = normalizeColor(uiRaw.panelBackground, uiDefaults.panelBackground);
+                const sectionBackground = normalizeColor(uiRaw.sectionBackground, uiDefaults.sectionBackground);
+                const sectionBorderColor = normalizeColor(uiRaw.sectionBorderColor, uiDefaults.sectionBorderColor);
+                const inputBackground = normalizeColor(uiRaw.inputBackground, uiDefaults.inputBackground);
+                const textColor = normalizeColor(uiRaw.textColor, uiDefaults.textColor);
+                const mutedTextColor = normalizeColor(uiRaw.mutedTextColor, uiDefaults.mutedTextColor);
+                const hintTextColor = normalizeColor(uiRaw.hintTextColor, uiDefaults.hintTextColor);
                 const animationSpeed = normalizeAnimationSpeed(uiRaw.animationSpeed);
                 const animationMs = animationSpeed === "fast" ? 120 : (animationSpeed === "slow" ? 320 : 200);
                 const labelFontSize = baseFontSize;
@@ -1339,12 +1382,14 @@ module.exports = (() => {
                 panel.style.padding = compactMode ? "16px" : "20px";
                 panel.style.maxWidth = `${panelMaxWidth}px`;
                 panel.style.margin = "0 auto";
+                panel.style.background = panelBackground;
+                panel.style.borderRadius = `${borderRadius}px`;
 
                 // Заголовок
                 const title = document.createElement("h2");
                 title.textContent = withIcon("⚙️", "Настройки khabarovskMod");
                 title.style.marginBottom = `${sectionSpacing + 10}px`;
-                title.style.color = "#FFFFFF";
+                title.style.color = textColor;
                 title.style.fontSize = `${baseFontSize + 10}px`;
                 title.style.fontWeight = "600";
                 panel.appendChild(title);
@@ -1353,9 +1398,9 @@ module.exports = (() => {
                 const createCollapsibleSection = (titleText, icon = "📋", defaultOpen = false) => {
                     const sectionWrapper = document.createElement("div");
                     sectionWrapper.style.marginBottom = `${sectionSpacing}px`;
-                    sectionWrapper.style.backgroundColor = "rgba(79, 84, 92, 0.3)";
+                    sectionWrapper.style.backgroundColor = sectionBackground;
                     sectionWrapper.style.borderRadius = `${borderRadius}px`;
-                    sectionWrapper.style.border = "1px solid rgba(79, 84, 92, 0.5)";
+                    sectionWrapper.style.border = `1px solid ${sectionBorderColor}`;
                     sectionWrapper.style.overflow = "hidden";
 
                     // Заголовок секции (кликабельный)
@@ -1376,14 +1421,14 @@ module.exports = (() => {
 
                     const sectionTitle = document.createElement("div");
                     sectionTitle.textContent = withIcon(icon, titleText);
-                    sectionTitle.style.color = "#FFFFFF";
+                    sectionTitle.style.color = textColor;
                     sectionTitle.style.fontSize = `${sectionTitleFontSize}px`;
                     sectionTitle.style.fontWeight = "600";
                     sectionHeader.appendChild(sectionTitle);
 
                     const arrow = document.createElement("div");
                     arrow.textContent = defaultOpen ? "▼" : "▶";
-                    arrow.style.color = "#B9BBBE";
+                    arrow.style.color = mutedTextColor;
                     arrow.style.fontSize = `${Math.max(baseFontSize - 2, 10)}px`;
                     arrow.style.marginLeft = "10px";
                     arrow.style.transition = `transform ${animationMs}ms`;
@@ -1393,7 +1438,7 @@ module.exports = (() => {
                     const sectionContent = document.createElement("div");
                     sectionContent.style.padding = sectionPaddingCss;
                     sectionContent.style.display = defaultOpen ? "block" : "none";
-                    sectionContent.style.borderTop = "1px solid rgba(79, 84, 92, 0.5)";
+                    sectionContent.style.borderTop = `1px solid ${sectionBorderColor}`;
 
                     // Переключение видимости
                     sectionHeader.onclick = () => {
@@ -1418,7 +1463,7 @@ module.exports = (() => {
                     label.textContent = labelText;
                     label.style.display = "block";
                     label.style.marginBottom = "8px";
-                    label.style.color = "#B9BBBE";
+                    label.style.color = mutedTextColor;
                     label.style.fontSize = `${labelFontSize}px`;
                     label.style.fontWeight = "500";
                     container.appendChild(label);
@@ -1430,15 +1475,15 @@ module.exports = (() => {
                     input.style.width = "100%";
                     input.style.padding = inputPadding;
                     input.style.marginBottom = "6px";
-                    input.style.backgroundColor = "rgba(4, 4, 5, 0.3)";
-                    input.style.border = "1px solid rgba(79, 84, 92, 0.5)";
+                    input.style.backgroundColor = inputBackground;
+                    input.style.border = `1px solid ${sectionBorderColor}`;
                     input.style.borderRadius = `${borderRadius}px`;
-                    input.style.color = "#FFFFFF";
+                    input.style.color = textColor;
                     input.style.fontSize = `${labelFontSize}px`;
                     input.style.boxSizing = "border-box";
                     input.style.transition = `border-color ${animationMs}ms`;
                     input.onfocus = () => input.style.borderColor = accentColor;
-                    input.onblur = () => input.style.borderColor = "rgba(79, 84, 92, 0.5)";
+                    input.onblur = () => input.style.borderColor = sectionBorderColor;
                     container.appendChild(input);
 
                     if (hintText) {
@@ -1446,7 +1491,7 @@ module.exports = (() => {
                         hint.textContent = hintText;
                         hint.style.display = "block";
                         hint.style.marginTop = "4px";
-                        hint.style.color = "#72767D";
+                        hint.style.color = hintTextColor;
                         hint.style.fontSize = `${hintFontSize}px`;
                         hint.style.lineHeight = "1.4";
                         container.appendChild(hint);
@@ -1463,7 +1508,7 @@ module.exports = (() => {
                     label.textContent = labelText;
                     label.style.display = "block";
                     label.style.marginBottom = "8px";
-                    label.style.color = "#B9BBBE";
+                    label.style.color = mutedTextColor;
                     label.style.fontSize = `${labelFontSize}px`;
                     label.style.fontWeight = "500";
                     container.appendChild(label);
@@ -1475,23 +1520,23 @@ module.exports = (() => {
                     textarea.style.minHeight = "90px";
                     textarea.style.padding = inputPadding;
                     textarea.style.marginBottom = "6px";
-                    textarea.style.backgroundColor = "rgba(4, 4, 5, 0.3)";
-                    textarea.style.border = "1px solid rgba(79, 84, 92, 0.5)";
+                    textarea.style.backgroundColor = inputBackground;
+                    textarea.style.border = `1px solid ${sectionBorderColor}`;
                     textarea.style.borderRadius = `${borderRadius}px`;
-                    textarea.style.color = "#FFFFFF";
+                    textarea.style.color = textColor;
                     textarea.style.fontSize = `${labelFontSize}px`;
                     textarea.style.resize = "vertical";
                     textarea.style.boxSizing = "border-box";
                     textarea.style.transition = `border-color ${animationMs}ms`;
                     textarea.onfocus = () => textarea.style.borderColor = accentColor;
-                    textarea.onblur = () => textarea.style.borderColor = "rgba(79, 84, 92, 0.5)";
+                    textarea.onblur = () => textarea.style.borderColor = sectionBorderColor;
                     container.appendChild(textarea);
 
                     if (hintText) {
                         const hint = document.createElement("div");
                         hint.textContent = hintText;
                         hint.style.fontSize = `${hintFontSize}px`;
-                        hint.style.color = "#72767D";
+                        hint.style.color = hintTextColor;
                         container.appendChild(hint);
                     }
 
@@ -1598,10 +1643,10 @@ module.exports = (() => {
                 const variablesHint = document.createElement("div");
                 variablesHint.style.marginTop = `${sectionSpacing}px`;
                 variablesHint.style.padding = `${Math.max(inputPaddingY, 8)}px`;
-                variablesHint.style.background = "rgba(79, 84, 92, 0.2)";
-                variablesHint.style.border = "1px solid rgba(79, 84, 92, 0.35)";
+                variablesHint.style.background = sectionBackground;
+                variablesHint.style.border = `1px solid ${sectionBorderColor}`;
                 variablesHint.style.borderRadius = `${borderRadius}px`;
-                variablesHint.style.color = "#B9BBBE";
+                variablesHint.style.color = mutedTextColor;
                 variablesHint.style.fontSize = `${hintFontSize}px`;
                 variablesHint.textContent = "Доступные переменные: {moderatorNick}, {userId}, {userTag}, {ruleId}, {punishment}, {dateIssued}, {dateEnd}";
                 formsSection.content.appendChild(variablesHint);
@@ -1653,7 +1698,7 @@ module.exports = (() => {
                     label.textContent = labelText;
                     label.style.display = "block";
                     label.style.marginBottom = "4px";
-                    label.style.color = "#B9BBBE";
+                    label.style.color = mutedTextColor;
                     label.style.fontSize = `${labelFontSize}px`;
                     label.style.fontWeight = "500";
                     label.style.cursor = "pointer";
@@ -1663,7 +1708,7 @@ module.exports = (() => {
                         const hint = document.createElement("small");
                         hint.textContent = hintText;
                         hint.style.display = "block";
-                        hint.style.color = "#72767D";
+                        hint.style.color = hintTextColor;
                         hint.style.fontSize = `${hintFontSize}px`;
                         labelContainer.appendChild(hint);
                     }
@@ -1952,10 +1997,66 @@ module.exports = (() => {
                 const accentColorField = createInputField(
                     "Цвет акцента (hex):",
                     this.settings.ui?.accentColor || "#5865F2",
-                    "Используется для кнопок и фокуса полей",
+                    "Используется для кнопок и фокуса полей (hex/rgb/rgba)",
                     "#5865F2"
                 );
                 uiSection.content.appendChild(accentColorField.container);
+
+                const panelBackgroundField = createInputField(
+                    "Фон панели (hex/rgb/rgba):",
+                    this.settings.ui?.panelBackground || "#1F2024",
+                    "Фон всей панели настроек",
+                    "#1F2024"
+                );
+                uiSection.content.appendChild(panelBackgroundField.container);
+
+                const sectionBackgroundField = createInputField(
+                    "Фон секций (hex/rgb/rgba):",
+                    this.settings.ui?.sectionBackground || "rgba(79, 84, 92, 0.3)",
+                    "Фон заголовков и контента секций",
+                    "rgba(79, 84, 92, 0.3)"
+                );
+                uiSection.content.appendChild(sectionBackgroundField.container);
+
+                const sectionBorderColorField = createInputField(
+                    "Цвет границ (hex/rgb/rgba):",
+                    this.settings.ui?.sectionBorderColor || "rgba(79, 84, 92, 0.5)",
+                    "Цвет рамок секций и полей",
+                    "rgba(79, 84, 92, 0.5)"
+                );
+                uiSection.content.appendChild(sectionBorderColorField.container);
+
+                const inputBackgroundField = createInputField(
+                    "Фон полей ввода (hex/rgb/rgba):",
+                    this.settings.ui?.inputBackground || "rgba(4, 4, 5, 0.3)",
+                    "Фон input/textarea",
+                    "rgba(4, 4, 5, 0.3)"
+                );
+                uiSection.content.appendChild(inputBackgroundField.container);
+
+                const textColorField = createInputField(
+                    "Основной цвет текста (hex/rgb/rgba):",
+                    this.settings.ui?.textColor || "#FFFFFF",
+                    "Цвет заголовков и кнопок",
+                    "#FFFFFF"
+                );
+                uiSection.content.appendChild(textColorField.container);
+
+                const mutedTextColorField = createInputField(
+                    "Приглушенный текст (hex/rgb/rgba):",
+                    this.settings.ui?.mutedTextColor || "#B9BBBE",
+                    "Цвет подписей и второстепенного текста",
+                    "#B9BBBE"
+                );
+                uiSection.content.appendChild(mutedTextColorField.container);
+
+                const hintTextColorField = createInputField(
+                    "Цвет подсказок (hex/rgb/rgba):",
+                    this.settings.ui?.hintTextColor || "#72767D",
+                    "Цвет мелких подсказок",
+                    "#72767D"
+                );
+                uiSection.content.appendChild(hintTextColorField.container);
 
                 const animationSpeedField = createInputField(
                     "Скорость анимаций (fast/normal/slow):",
@@ -1973,13 +2074,13 @@ module.exports = (() => {
                 buttonsContainer.style.gap = "10px";
                 buttonsContainer.style.marginTop = `${sectionSpacing + 20}px`;
                 buttonsContainer.style.paddingTop = `${sectionSpacing + 10}px`;
-                buttonsContainer.style.borderTop = "1px solid rgba(79, 84, 92, 0.5)";
+                buttonsContainer.style.borderTop = `1px solid ${sectionBorderColor}`;
 
                 const saveButton = document.createElement("button");
                 saveButton.textContent = withIcon("💾", "Сохранить настройки");
                 saveButton.style.padding = compactMode ? "10px 18px" : "12px 24px";
                 saveButton.style.background = accentColor;
-                saveButton.style.color = "white";
+                saveButton.style.color = textColor;
                 saveButton.style.border = "none";
                 saveButton.style.borderRadius = "6px";
                 saveButton.style.cursor = "pointer";
@@ -2063,6 +2164,13 @@ module.exports = (() => {
                         this.settings.ui.inputPaddingX = normalizeNumber(inputPaddingXField.input.value, uiDefaults.inputPaddingX, 6, 24);
                         this.settings.ui.borderRadius = normalizeNumber(borderRadiusField.input.value, uiDefaults.borderRadius, 0, 20);
                         this.settings.ui.accentColor = normalizeColor(accentColorField.input.value, uiDefaults.accentColor);
+                        this.settings.ui.panelBackground = normalizeColor(panelBackgroundField.input.value, uiDefaults.panelBackground);
+                        this.settings.ui.sectionBackground = normalizeColor(sectionBackgroundField.input.value, uiDefaults.sectionBackground);
+                        this.settings.ui.sectionBorderColor = normalizeColor(sectionBorderColorField.input.value, uiDefaults.sectionBorderColor);
+                        this.settings.ui.inputBackground = normalizeColor(inputBackgroundField.input.value, uiDefaults.inputBackground);
+                        this.settings.ui.textColor = normalizeColor(textColorField.input.value, uiDefaults.textColor);
+                        this.settings.ui.mutedTextColor = normalizeColor(mutedTextColorField.input.value, uiDefaults.mutedTextColor);
+                        this.settings.ui.hintTextColor = normalizeColor(hintTextColorField.input.value, uiDefaults.hintTextColor);
                         this.settings.ui.animationSpeed = normalizeAnimationSpeed(animationSpeedField.input.value);
 
                         this.saveSettings(this.settings);
@@ -2077,7 +2185,7 @@ module.exports = (() => {
                 resetButton.textContent = withIcon("🔄", "Сбросить к умолчаниям");
                 resetButton.style.padding = compactMode ? "10px 18px" : "12px 24px";
                 resetButton.style.background = "#4E5058";
-                resetButton.style.color = "white";
+                resetButton.style.color = textColor;
                 resetButton.style.border = "none";
                 resetButton.style.borderRadius = "6px";
                 resetButton.style.cursor = "pointer";

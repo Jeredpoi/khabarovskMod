@@ -61,7 +61,14 @@
             "inputPaddingY": 10,
             "inputPaddingX": 12,
             "borderRadius": 8,
-            "accentColor": "#5865F2"
+            "accentColor": "#5865F2",
+            "panelBackground": "#1F2024",
+            "sectionBackground": "rgba(79, 84, 92, 0.3)",
+            "sectionBorderColor": "rgba(79, 84, 92, 0.5)",
+            "inputBackground": "rgba(4, 4, 5, 0.3)",
+            "textColor": "#FFFFFF",
+            "mutedTextColor": "#B9BBBE",
+            "hintTextColor": "#72767D"
         },
         "advanced": {
             "confirmActions": false,
