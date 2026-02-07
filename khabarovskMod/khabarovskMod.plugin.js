@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 0.1.0
+ * @version 1.1.1
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://raw.githubusercontent.com/Jeredpoi/khabarovskMod/main/khabarovskMod.plugin.js
@@ -12,7 +12,7 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "0.1.0",
+            version: "1.1.1",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
@@ -20,39 +20,16 @@ module.exports = (() => {
                 title: "Новые функции",
                 type: "added",
                 items: [
-                    "Добавлены формы наказаний (устное предупреждение, предупреждение, мут, бан)",
-                    "Формы наказаний доступны в меню модерации и копируются с автоподстановкой",
-                    "Добавлены команды очистки (clear one / clear member) в меню модерации",
-                    "🔥 МАССИВНОЕ ОБНОВЛЕНИЕ КОНФИГА",
-                    "📦 Добавлена секция 'Настройки команд' - время мута/бана по умолчанию",
-                    "🔔 Добавлена секция 'Настройки уведомлений' - таймауты, типы уведомлений",
-                    "📝 Добавлена секция 'Логирование' - логи в консоль/файл",
-                    "🎨 Добавлена секция 'Настройки интерфейса' - компактный режим, иконки",
-                    "⚙️ Расширена секция 'Дополнительные настройки' - подтверждение действий, превью, горячие клавиши",
-                    "💾 Все новые настройки сохраняются в конфиг и загружаются автоматически",
-                    "🔄 Глубокое слияние настроек - старые конфиги работают, новые настройки добавляются",
-                    "Панель настроек с раскрывающимися секциями (accordion) - как в StaffTag",
-                    "Добавлена настройка 'Показывать уведомления' (вкл/выкл toast-уведомления)",
-                    "Добавлена настройка 'Автосохранение' (автоматическое сохранение при изменении)",
-                    "Улучшена структура конфигурационного файла с секциями (settings, customRules)",
-                    "Добавлена поддержка обратной совместимости со старым форматом конфига",
-                    "Полностью переработана панель настроек с улучшенным визуальным дизайном",
-                    "Добавлена настройка всех форматов команд (/warn, /mute, /ban, /permban, /user, /punish)",
-                    "Добавлена настройка всех категорий наказаний (с автоотправкой, с копированием и т.д.)",
-                    "Добавлена кнопка сброса настроек к умолчаниям",
-                    "Улучшен интерфейс с секциями, иконками и подсказками"
+                    "Расширены настройки интерфейса в конфиге (ширина панели, шрифты, отступы, скругления, акцентный цвет, скорость анимаций)",
+                    "Панель настроек использует новые UI-параметры (размеры, паддинги, анимации, цвета)",
+                    "Параметр showIcons управляет иконками в меню и заголовках секций"
                 ]
             },
             {
                 title: "Исправления",
                 type: "fixed",
                 items: [
-                    "Исправлено глубокое объединение настроек (команды теперь не теряются при загрузке конфига)",
-                    "Добавлена проверка на null для MessageActions перед отправкой сообщений",
-                    "Добавлена инициализация массивов наказаний для предотвращения ошибок",
-                    "Добавлены проверки наличия команд перед использованием в executePunishment",
-                    "Исправлена утечка памяти при копировании в буфер обмена (добавлен finally блок)",
-                    "Синхронизированы версии @version и config.info.version"
+                    "Нет"
                 ]
             }
         ]
@@ -239,7 +216,15 @@ module.exports = (() => {
                         theme: "dark",
                         compactMode: false,
                         showIcons: true,
-                        animationSpeed: "normal"
+                        animationSpeed: "normal",
+                        panelMaxWidth: 800,
+                        baseFontSize: 14,
+                        sectionSpacing: 10,
+                        sectionPadding: 15,
+                        inputPaddingY: 10,
+                        inputPaddingX: 12,
+                        borderRadius: 8,
+                        accentColor: "#5865F2"
                     },
                     advanced: {
                         confirmActions: false,
@@ -355,6 +340,23 @@ module.exports = (() => {
                     // Извлекаем кастомные правила, если они есть
                     const customRules = settings._customRules || { enabled: false, categories: [] };
                     delete settings._customRules;
+                    const uiSettings = settings.ui || {};
+                    const normalizeNumber = (value, fallback, min = null, max = null) => {
+                        const num = parseInt(value, 10);
+                        if (!Number.isFinite(num)) return fallback;
+                        if (min !== null && num < min) return min;
+                        if (max !== null && num > max) return max;
+                        return num;
+                    };
+                    const normalizeColor = (value, fallback) => {
+                        if (typeof value !== "string") return fallback;
+                        const trimmed = value.trim();
+                        return /^#([0-9a-f]{3}){1,2}$/i.test(trimmed) ? trimmed : fallback;
+                    };
+                    const normalizeAnimationSpeed = (value) => {
+                        const v = String(value || "").trim().toLowerCase();
+                        return (v === "fast" || v === "normal" || v === "slow") ? v : "normal";
+                    };
 
                     // Создаем красивую структурированную версию конфига с секциями
                     const configWithSections = {
@@ -406,11 +408,19 @@ module.exports = (() => {
                                 bypassRoles: [],
                                 checkPermissions: false
                             },
-                            ui: settings.ui || {
-                                theme: "dark",
-                                compactMode: false,
-                                showIcons: true,
-                                animationSpeed: "normal"
+                            ui: {
+                                theme: uiSettings.theme || "dark",
+                                compactMode: uiSettings.compactMode === true,
+                                showIcons: uiSettings.showIcons !== false,
+                                animationSpeed: normalizeAnimationSpeed(uiSettings.animationSpeed),
+                                panelMaxWidth: normalizeNumber(uiSettings.panelMaxWidth, 800, 420, 1400),
+                                baseFontSize: normalizeNumber(uiSettings.baseFontSize, 14, 11, 20),
+                                sectionSpacing: normalizeNumber(uiSettings.sectionSpacing, 10, 4, 24),
+                                sectionPadding: normalizeNumber(uiSettings.sectionPadding, 15, 8, 30),
+                                inputPaddingY: normalizeNumber(uiSettings.inputPaddingY, 10, 4, 18),
+                                inputPaddingX: normalizeNumber(uiSettings.inputPaddingX, 12, 6, 24),
+                                borderRadius: normalizeNumber(uiSettings.borderRadius, 8, 0, 20),
+                                accentColor: normalizeColor(uiSettings.accentColor, "#5865F2")
                             },
                             advanced: settings.advanced || {
                                 confirmActions: false,
@@ -1082,6 +1092,8 @@ module.exports = (() => {
             }
 
             buildModerationMenuItems(user, messageId) {
+                const showIcons = this.settings.ui?.showIcons !== false;
+                const withIcon = (icon, text) => showIcons ? `${icon} ${text}` : text;
                 const categoryItems = Object.keys(this.rules).map(categoryKey => {
                     const category = this.rules[categoryKey];
                     const ruleItems = Object.keys(category.rules).map(ruleId => {
@@ -1112,7 +1124,7 @@ module.exports = (() => {
                 const toolsItems = [
                     {
                         type: "item",
-                        label: "🔍 Проверка пользователя",
+                        label: withIcon("🔍", "Проверка пользователя"),
                         id: "khabarovsk-tool-user",
                         action: () => {
                             if (!this.settings.messageFormats?.commands?.user) {
@@ -1130,7 +1142,7 @@ module.exports = (() => {
                     },
                     {
                         type: "item",
-                        label: "⚖️ Punish",
+                        label: withIcon("⚖️", "Punish"),
                         id: "khabarovsk-tool-punish",
                         action: () => {
                             if (!this.settings.messageFormats?.commands?.punish) {
@@ -1186,7 +1198,7 @@ module.exports = (() => {
                 if (formsItems.length) {
                     toolsItems.push({
                         type: "submenu",
-                        label: "📝 Формы наказаний",
+                        label: withIcon("📝", "Формы наказаний"),
                         id: "khabarovsk-punishment-forms",
                         items: formsItems
                     });
@@ -1194,7 +1206,7 @@ module.exports = (() => {
 
                 toolsItems.push({
                     type: "item",
-                    label: "📜 История наказаний",
+                    label: withIcon("📜", "История наказаний"),
                     id: "khabarovsk-history",
                     action: () => this.showHistoryModal()
                 });
@@ -1203,7 +1215,7 @@ module.exports = (() => {
                 if (messageId) {
                     cleanupItems.push({
                         type: "item",
-                        label: "🧹 Очистить сообщение",
+                        label: withIcon("🧹", "Очистить сообщение"),
                         id: "khabarovsk-clear-one",
                         action: () => {
                             const clearOne = this.settings.messageFormats?.commands?.clearOne || this.settings.messageFormats?.commands?.clear1;
@@ -1224,7 +1236,7 @@ module.exports = (() => {
                 }
                 cleanupItems.push({
                     type: "item",
-                    label: "🧹 Очистить сообщения пользователя",
+                    label: withIcon("🧹", "Очистить сообщения пользователя"),
                     id: "khabarovsk-clear-member",
                     action: () => {
                         if (!this.settings.messageFormats?.commands?.clearMember) {
@@ -1244,7 +1256,7 @@ module.exports = (() => {
                 if (cleanupItems.length) {
                     toolsItems.push({
                         type: "submenu",
-                        label: "🧹 Очистка",
+                        label: withIcon("🧹", "Очистка"),
                         id: "khabarovsk-tool-cleanup",
                         items: cleanupItems
                     });
@@ -1252,7 +1264,7 @@ module.exports = (() => {
 
                 const toolsMenuItem = {
                     type: "submenu",
-                    label: "🔧 Инструменты модерации",
+                    label: withIcon("🔧", "Инструменты модерации"),
                     id: "khabarovsk-moderation-tools",
                     items: toolsItems
                 };
@@ -1266,38 +1278,95 @@ module.exports = (() => {
                     this.settings = this.loadSettings();
                 }
 
+                const uiDefaults = {
+                    theme: "dark",
+                    compactMode: false,
+                    showIcons: true,
+                    animationSpeed: "normal",
+                    panelMaxWidth: 800,
+                    baseFontSize: 14,
+                    sectionSpacing: 10,
+                    sectionPadding: 15,
+                    inputPaddingY: 10,
+                    inputPaddingX: 12,
+                    borderRadius: 8,
+                    accentColor: "#5865F2"
+                };
+                const uiRaw = this.settings.ui || {};
+                const normalizeNumber = (value, fallback, min = null, max = null) => {
+                    const num = parseInt(value, 10);
+                    if (!Number.isFinite(num)) return fallback;
+                    if (min !== null && num < min) return min;
+                    if (max !== null && num > max) return max;
+                    return num;
+                };
+                const normalizeColor = (value, fallback) => {
+                    if (typeof value !== "string") return fallback;
+                    const trimmed = value.trim();
+                    return /^#([0-9a-f]{3}){1,2}$/i.test(trimmed) ? trimmed : fallback;
+                };
+                const normalizeAnimationSpeed = (value) => {
+                    const v = String(value || "").trim().toLowerCase();
+                    return (v === "fast" || v === "normal" || v === "slow") ? v : "normal";
+                };
+                const compactMode = uiRaw.compactMode === true;
+                const showIcons = uiRaw.showIcons !== false;
+                const panelMaxWidth = normalizeNumber(uiRaw.panelMaxWidth, uiDefaults.panelMaxWidth, 420, 1400);
+                const baseFontSize = normalizeNumber(uiRaw.baseFontSize, uiDefaults.baseFontSize, 11, 20);
+                const sectionSpacing = compactMode
+                    ? 6
+                    : normalizeNumber(uiRaw.sectionSpacing, uiDefaults.sectionSpacing, 4, 24);
+                const sectionPadding = compactMode
+                    ? 10
+                    : normalizeNumber(uiRaw.sectionPadding, uiDefaults.sectionPadding, 8, 30);
+                const inputPaddingY = compactMode
+                    ? 6
+                    : normalizeNumber(uiRaw.inputPaddingY, uiDefaults.inputPaddingY, 4, 18);
+                const inputPaddingX = normalizeNumber(uiRaw.inputPaddingX, uiDefaults.inputPaddingX, 6, 24);
+                const borderRadius = normalizeNumber(uiRaw.borderRadius, uiDefaults.borderRadius, 0, 20);
+                const accentColor = normalizeColor(uiRaw.accentColor, uiDefaults.accentColor);
+                const animationSpeed = normalizeAnimationSpeed(uiRaw.animationSpeed);
+                const animationMs = animationSpeed === "fast" ? 120 : (animationSpeed === "slow" ? 320 : 200);
+                const labelFontSize = baseFontSize;
+                const hintFontSize = Math.max(baseFontSize - 2, 11);
+                const sectionTitleFontSize = baseFontSize + 2;
+                const inputPadding = `${inputPaddingY}px ${inputPaddingX}px`;
+                const sectionPaddingCss = `${sectionPadding}px ${sectionPadding + 5}px`;
+                const withIcon = (icon, text) => (showIcons && icon) ? `${icon} ${text}` : text;
+                const accentHoverColor = accentColor === "#5865F2" ? "#4752C4" : accentColor;
+
                 const panel = document.createElement("div");
-                panel.style.padding = "20px";
-                panel.style.maxWidth = "800px";
+                panel.style.padding = compactMode ? "16px" : "20px";
+                panel.style.maxWidth = `${panelMaxWidth}px`;
                 panel.style.margin = "0 auto";
 
                 // Заголовок
                 const title = document.createElement("h2");
-                title.textContent = "⚙️ Настройки khabarovskMod";
-                title.style.marginBottom = "20px";
+                title.textContent = withIcon("⚙️", "Настройки khabarovskMod");
+                title.style.marginBottom = `${sectionSpacing + 10}px`;
                 title.style.color = "#FFFFFF";
-                title.style.fontSize = "24px";
+                title.style.fontSize = `${baseFontSize + 10}px`;
                 title.style.fontWeight = "600";
                 panel.appendChild(title);
 
                 // Функция создания раскрывающейся секции (accordion)
                 const createCollapsibleSection = (titleText, icon = "📋", defaultOpen = false) => {
                     const sectionWrapper = document.createElement("div");
-                    sectionWrapper.style.marginBottom = "10px";
+                    sectionWrapper.style.marginBottom = `${sectionSpacing}px`;
                     sectionWrapper.style.backgroundColor = "rgba(79, 84, 92, 0.3)";
-                    sectionWrapper.style.borderRadius = "8px";
+                    sectionWrapper.style.borderRadius = `${borderRadius}px`;
                     sectionWrapper.style.border = "1px solid rgba(79, 84, 92, 0.5)";
                     sectionWrapper.style.overflow = "hidden";
 
                     // Заголовок секции (кликабельный)
                     const sectionHeader = document.createElement("div");
-                    sectionHeader.style.padding = "15px 20px";
+                    sectionHeader.style.padding = sectionPaddingCss;
                     sectionHeader.style.cursor = "pointer";
                     sectionHeader.style.display = "flex";
                     sectionHeader.style.alignItems = "center";
                     sectionHeader.style.justifyContent = "space-between";
                     sectionHeader.style.userSelect = "none";
-                    sectionHeader.style.transition = "background 0.2s";
+                    sectionHeader.style.transition = `background ${animationMs}ms`;
                     sectionHeader.onmouseenter = () => sectionHeader.style.backgroundColor = "rgba(79, 84, 92, 0.5)";
                     sectionHeader.onmouseleave = () => {
                         if (!sectionContent.style.display || sectionContent.style.display !== "none") {
@@ -1306,23 +1375,23 @@ module.exports = (() => {
                     };
 
                     const sectionTitle = document.createElement("div");
-                    sectionTitle.textContent = `${icon} ${titleText}`;
+                    sectionTitle.textContent = withIcon(icon, titleText);
                     sectionTitle.style.color = "#FFFFFF";
-                    sectionTitle.style.fontSize = "16px";
+                    sectionTitle.style.fontSize = `${sectionTitleFontSize}px`;
                     sectionTitle.style.fontWeight = "600";
                     sectionHeader.appendChild(sectionTitle);
 
                     const arrow = document.createElement("div");
                     arrow.textContent = defaultOpen ? "▼" : "▶";
                     arrow.style.color = "#B9BBBE";
-                    arrow.style.fontSize = "12px";
+                    arrow.style.fontSize = `${Math.max(baseFontSize - 2, 10)}px`;
                     arrow.style.marginLeft = "10px";
-                    arrow.style.transition = "transform 0.2s";
+                    arrow.style.transition = `transform ${animationMs}ms`;
                     sectionHeader.appendChild(arrow);
 
                     // Контент секции
                     const sectionContent = document.createElement("div");
-                    sectionContent.style.padding = "15px 20px";
+                    sectionContent.style.padding = sectionPaddingCss;
                     sectionContent.style.display = defaultOpen ? "block" : "none";
                     sectionContent.style.borderTop = "1px solid rgba(79, 84, 92, 0.5)";
 
@@ -1343,14 +1412,14 @@ module.exports = (() => {
                 // Функция создания поля ввода
                 const createInputField = (labelText, value, hintText, placeholder = "") => {
                     const container = document.createElement("div");
-                    container.style.marginBottom = "20px";
+                    container.style.marginBottom = `${sectionSpacing + 10}px`;
 
                     const label = document.createElement("label");
                     label.textContent = labelText;
                     label.style.display = "block";
                     label.style.marginBottom = "8px";
                     label.style.color = "#B9BBBE";
-                    label.style.fontSize = "14px";
+                    label.style.fontSize = `${labelFontSize}px`;
                     label.style.fontWeight = "500";
                     container.appendChild(label);
 
@@ -1359,16 +1428,16 @@ module.exports = (() => {
                     input.value = value || "";
                     input.placeholder = placeholder;
                     input.style.width = "100%";
-                    input.style.padding = "10px 12px";
+                    input.style.padding = inputPadding;
                     input.style.marginBottom = "6px";
                     input.style.backgroundColor = "rgba(4, 4, 5, 0.3)";
                     input.style.border = "1px solid rgba(79, 84, 92, 0.5)";
-                    input.style.borderRadius = "4px";
+                    input.style.borderRadius = `${borderRadius}px`;
                     input.style.color = "#FFFFFF";
-                    input.style.fontSize = "14px";
+                    input.style.fontSize = `${labelFontSize}px`;
                     input.style.boxSizing = "border-box";
-                    input.style.transition = "border-color 0.2s";
-                    input.onfocus = () => input.style.borderColor = "#5865F2";
+                    input.style.transition = `border-color ${animationMs}ms`;
+                    input.onfocus = () => input.style.borderColor = accentColor;
                     input.onblur = () => input.style.borderColor = "rgba(79, 84, 92, 0.5)";
                     container.appendChild(input);
 
@@ -1378,7 +1447,7 @@ module.exports = (() => {
                         hint.style.display = "block";
                         hint.style.marginTop = "4px";
                         hint.style.color = "#72767D";
-                        hint.style.fontSize = "12px";
+                        hint.style.fontSize = `${hintFontSize}px`;
                         hint.style.lineHeight = "1.4";
                         container.appendChild(hint);
                     }
@@ -1388,14 +1457,14 @@ module.exports = (() => {
 
                 const createTextareaField = (labelText, value, hintText, placeholder = "") => {
                     const container = document.createElement("div");
-                    container.style.marginBottom = "20px";
+                    container.style.marginBottom = `${sectionSpacing + 10}px`;
 
                     const label = document.createElement("label");
                     label.textContent = labelText;
                     label.style.display = "block";
                     label.style.marginBottom = "8px";
                     label.style.color = "#B9BBBE";
-                    label.style.fontSize = "14px";
+                    label.style.fontSize = `${labelFontSize}px`;
                     label.style.fontWeight = "500";
                     container.appendChild(label);
 
@@ -1404,20 +1473,24 @@ module.exports = (() => {
                     textarea.placeholder = placeholder;
                     textarea.style.width = "100%";
                     textarea.style.minHeight = "90px";
-                    textarea.style.padding = "10px 12px";
+                    textarea.style.padding = inputPadding;
                     textarea.style.marginBottom = "6px";
                     textarea.style.backgroundColor = "rgba(4, 4, 5, 0.3)";
                     textarea.style.border = "1px solid rgba(79, 84, 92, 0.5)";
-                    textarea.style.borderRadius = "4px";
+                    textarea.style.borderRadius = `${borderRadius}px`;
                     textarea.style.color = "#FFFFFF";
-                    textarea.style.fontSize = "14px";
+                    textarea.style.fontSize = `${labelFontSize}px`;
                     textarea.style.resize = "vertical";
+                    textarea.style.boxSizing = "border-box";
+                    textarea.style.transition = `border-color ${animationMs}ms`;
+                    textarea.onfocus = () => textarea.style.borderColor = accentColor;
+                    textarea.onblur = () => textarea.style.borderColor = "rgba(79, 84, 92, 0.5)";
                     container.appendChild(textarea);
 
                     if (hintText) {
                         const hint = document.createElement("div");
                         hint.textContent = hintText;
-                        hint.style.fontSize = "12px";
+                        hint.style.fontSize = `${hintFontSize}px`;
                         hint.style.color = "#72767D";
                         container.appendChild(hint);
                     }
@@ -1523,13 +1596,13 @@ module.exports = (() => {
                 formsSection.content.appendChild(formTemplateField.container);
 
                 const variablesHint = document.createElement("div");
-                variablesHint.style.marginTop = "10px";
-                variablesHint.style.padding = "10px";
+                variablesHint.style.marginTop = `${sectionSpacing}px`;
+                variablesHint.style.padding = `${Math.max(inputPaddingY, 8)}px`;
                 variablesHint.style.background = "rgba(79, 84, 92, 0.2)";
                 variablesHint.style.border = "1px solid rgba(79, 84, 92, 0.35)";
-                variablesHint.style.borderRadius = "6px";
+                variablesHint.style.borderRadius = `${borderRadius}px`;
                 variablesHint.style.color = "#B9BBBE";
-                variablesHint.style.fontSize = "12px";
+                variablesHint.style.fontSize = `${hintFontSize}px`;
                 variablesHint.textContent = "Доступные переменные: {moderatorNick}, {userId}, {userTag}, {ruleId}, {punishment}, {dateIssued}, {dateEnd}";
                 formsSection.content.appendChild(variablesHint);
 
@@ -1568,7 +1641,7 @@ module.exports = (() => {
                 const createToggle = (labelText, initialValue, hintText) => {
                     let currentValue = initialValue;
                     const container = document.createElement("div");
-                    container.style.marginBottom = "20px";
+                    container.style.marginBottom = `${sectionSpacing + 10}px`;
                     container.style.display = "flex";
                     container.style.alignItems = "center";
                     container.style.justifyContent = "space-between";
@@ -1581,7 +1654,7 @@ module.exports = (() => {
                     label.style.display = "block";
                     label.style.marginBottom = "4px";
                     label.style.color = "#B9BBBE";
-                    label.style.fontSize = "14px";
+                    label.style.fontSize = `${labelFontSize}px`;
                     label.style.fontWeight = "500";
                     label.style.cursor = "pointer";
                     labelContainer.appendChild(label);
@@ -1591,35 +1664,41 @@ module.exports = (() => {
                         hint.textContent = hintText;
                         hint.style.display = "block";
                         hint.style.color = "#72767D";
-                        hint.style.fontSize = "12px";
+                        hint.style.fontSize = `${hintFontSize}px`;
                         labelContainer.appendChild(hint);
                     }
 
+                    const toggleWidth = compactMode ? 38 : 44;
+                    const toggleHeight = compactMode ? 20 : 24;
+                    const toggleCircleSize = compactMode ? 14 : 18;
+                    const togglePadding = 3;
+                    const toggleOnLeft = toggleWidth - toggleCircleSize - togglePadding;
+
                     const toggle = document.createElement("div");
-                    toggle.style.width = "44px";
-                    toggle.style.height = "24px";
-                    toggle.style.borderRadius = "12px";
-                    toggle.style.backgroundColor = currentValue ? "#5865F2" : "#4E5058";
+                    toggle.style.width = `${toggleWidth}px`;
+                    toggle.style.height = `${toggleHeight}px`;
+                    toggle.style.borderRadius = `${Math.floor(toggleHeight / 2)}px`;
+                    toggle.style.backgroundColor = currentValue ? accentColor : "#4E5058";
                     toggle.style.position = "relative";
                     toggle.style.cursor = "pointer";
-                    toggle.style.transition = "background 0.2s";
+                    toggle.style.transition = `background ${animationMs}ms`;
                     toggle.style.flexShrink = "0";
 
                     const toggleCircle = document.createElement("div");
-                    toggleCircle.style.width = "18px";
-                    toggleCircle.style.height = "18px";
+                    toggleCircle.style.width = `${toggleCircleSize}px`;
+                    toggleCircle.style.height = `${toggleCircleSize}px`;
                     toggleCircle.style.borderRadius = "50%";
                     toggleCircle.style.backgroundColor = "#FFFFFF";
                     toggleCircle.style.position = "absolute";
-                    toggleCircle.style.top = "3px";
-                    toggleCircle.style.left = currentValue ? "23px" : "3px";
-                    toggleCircle.style.transition = "left 0.2s";
+                    toggleCircle.style.top = `${togglePadding}px`;
+                    toggleCircle.style.left = currentValue ? `${toggleOnLeft}px` : `${togglePadding}px`;
+                    toggleCircle.style.transition = `left ${animationMs}ms`;
                     toggle.appendChild(toggleCircle);
 
                     const updateToggle = (newValue) => {
                         currentValue = newValue;
-                        toggle.style.backgroundColor = newValue ? "#5865F2" : "#4E5058";
-                        toggleCircle.style.left = newValue ? "23px" : "3px";
+                        toggle.style.backgroundColor = newValue ? accentColor : "#4E5058";
+                        toggleCircle.style.left = newValue ? `${toggleOnLeft}px` : `${togglePadding}px`;
                     };
 
                     toggle.onclick = () => updateToggle(!currentValue);
@@ -1793,29 +1872,122 @@ module.exports = (() => {
                 );
                 uiSection.content.appendChild(showIconsToggle.container);
 
+                const panelMaxWidthField = createInputField(
+                    "Макс. ширина панели (px):",
+                    this.settings.ui?.panelMaxWidth || 800,
+                    "Ширина панели настроек",
+                    "800"
+                );
+                panelMaxWidthField.input.type = "number";
+                panelMaxWidthField.input.min = "420";
+                panelMaxWidthField.input.max = "1400";
+                uiSection.content.appendChild(panelMaxWidthField.container);
+
+                const baseFontSizeField = createInputField(
+                    "Базовый размер шрифта (px):",
+                    this.settings.ui?.baseFontSize || 14,
+                    "Базовый размер текста в настройках",
+                    "14"
+                );
+                baseFontSizeField.input.type = "number";
+                baseFontSizeField.input.min = "11";
+                baseFontSizeField.input.max = "20";
+                uiSection.content.appendChild(baseFontSizeField.container);
+
+                const sectionSpacingField = createInputField(
+                    "Отступы между секциями (px):",
+                    this.settings.ui?.sectionSpacing || 10,
+                    "Вертикальный отступ между секциями",
+                    "10"
+                );
+                sectionSpacingField.input.type = "number";
+                sectionSpacingField.input.min = "4";
+                sectionSpacingField.input.max = "24";
+                uiSection.content.appendChild(sectionSpacingField.container);
+
+                const sectionPaddingField = createInputField(
+                    "Внутренние отступы секций (px):",
+                    this.settings.ui?.sectionPadding || 15,
+                    "Отступы внутри заголовка и содержимого секции",
+                    "15"
+                );
+                sectionPaddingField.input.type = "number";
+                sectionPaddingField.input.min = "8";
+                sectionPaddingField.input.max = "30";
+                uiSection.content.appendChild(sectionPaddingField.container);
+
+                const inputPaddingYField = createInputField(
+                    "Отступы полей ввода по вертикали (px):",
+                    this.settings.ui?.inputPaddingY || 10,
+                    "Внутренние отступы сверху/снизу",
+                    "10"
+                );
+                inputPaddingYField.input.type = "number";
+                inputPaddingYField.input.min = "4";
+                inputPaddingYField.input.max = "18";
+                uiSection.content.appendChild(inputPaddingYField.container);
+
+                const inputPaddingXField = createInputField(
+                    "Отступы полей ввода по горизонтали (px):",
+                    this.settings.ui?.inputPaddingX || 12,
+                    "Внутренние отступы слева/справа",
+                    "12"
+                );
+                inputPaddingXField.input.type = "number";
+                inputPaddingXField.input.min = "6";
+                inputPaddingXField.input.max = "24";
+                uiSection.content.appendChild(inputPaddingXField.container);
+
+                const borderRadiusField = createInputField(
+                    "Скругление углов (px):",
+                    this.settings.ui?.borderRadius || 8,
+                    "Скругление секций и полей",
+                    "8"
+                );
+                borderRadiusField.input.type = "number";
+                borderRadiusField.input.min = "0";
+                borderRadiusField.input.max = "20";
+                uiSection.content.appendChild(borderRadiusField.container);
+
+                const accentColorField = createInputField(
+                    "Цвет акцента (hex):",
+                    this.settings.ui?.accentColor || "#5865F2",
+                    "Используется для кнопок и фокуса полей",
+                    "#5865F2"
+                );
+                uiSection.content.appendChild(accentColorField.container);
+
+                const animationSpeedField = createInputField(
+                    "Скорость анимаций (fast/normal/slow):",
+                    this.settings.ui?.animationSpeed || "normal",
+                    "Скорость анимаций интерфейса",
+                    "normal"
+                );
+                uiSection.content.appendChild(animationSpeedField.container);
+
                 panel.appendChild(uiSection.wrapper);
 
                 // Кнопки действий
                 const buttonsContainer = document.createElement("div");
                 buttonsContainer.style.display = "flex";
                 buttonsContainer.style.gap = "10px";
-                buttonsContainer.style.marginTop = "30px";
-                buttonsContainer.style.paddingTop = "20px";
+                buttonsContainer.style.marginTop = `${sectionSpacing + 20}px`;
+                buttonsContainer.style.paddingTop = `${sectionSpacing + 10}px`;
                 buttonsContainer.style.borderTop = "1px solid rgba(79, 84, 92, 0.5)";
 
                 const saveButton = document.createElement("button");
-                saveButton.textContent = "💾 Сохранить настройки";
-                saveButton.style.padding = "12px 24px";
-                saveButton.style.background = "#5865F2";
+                saveButton.textContent = withIcon("💾", "Сохранить настройки");
+                saveButton.style.padding = compactMode ? "10px 18px" : "12px 24px";
+                saveButton.style.background = accentColor;
                 saveButton.style.color = "white";
                 saveButton.style.border = "none";
                 saveButton.style.borderRadius = "6px";
                 saveButton.style.cursor = "pointer";
                 saveButton.style.fontWeight = "600";
-                saveButton.style.fontSize = "14px";
-                saveButton.style.transition = "background 0.2s";
-                saveButton.onmouseenter = () => saveButton.style.background = "#4752C4";
-                saveButton.onmouseleave = () => saveButton.style.background = "#5865F2";
+                saveButton.style.fontSize = `${labelFontSize}px`;
+                saveButton.style.transition = `background ${animationMs}ms`;
+                saveButton.onmouseenter = () => saveButton.style.background = accentHoverColor;
+                saveButton.onmouseleave = () => saveButton.style.background = accentColor;
 
                 saveButton.onclick = () => {
                     try {
@@ -1883,6 +2055,15 @@ module.exports = (() => {
                         if (!this.settings.ui) this.settings.ui = {};
                         this.settings.ui.compactMode = compactModeToggle.toggle.getValue();
                         this.settings.ui.showIcons = showIconsToggle.toggle.getValue();
+                        this.settings.ui.panelMaxWidth = normalizeNumber(panelMaxWidthField.input.value, uiDefaults.panelMaxWidth, 420, 1400);
+                        this.settings.ui.baseFontSize = normalizeNumber(baseFontSizeField.input.value, uiDefaults.baseFontSize, 11, 20);
+                        this.settings.ui.sectionSpacing = normalizeNumber(sectionSpacingField.input.value, uiDefaults.sectionSpacing, 4, 24);
+                        this.settings.ui.sectionPadding = normalizeNumber(sectionPaddingField.input.value, uiDefaults.sectionPadding, 8, 30);
+                        this.settings.ui.inputPaddingY = normalizeNumber(inputPaddingYField.input.value, uiDefaults.inputPaddingY, 4, 18);
+                        this.settings.ui.inputPaddingX = normalizeNumber(inputPaddingXField.input.value, uiDefaults.inputPaddingX, 6, 24);
+                        this.settings.ui.borderRadius = normalizeNumber(borderRadiusField.input.value, uiDefaults.borderRadius, 0, 20);
+                        this.settings.ui.accentColor = normalizeColor(accentColorField.input.value, uiDefaults.accentColor);
+                        this.settings.ui.animationSpeed = normalizeAnimationSpeed(animationSpeedField.input.value);
 
                         this.saveSettings(this.settings);
                         this.showToast("✅ Настройки успешно сохранены!", "success");
@@ -1893,16 +2074,16 @@ module.exports = (() => {
                 };
 
                 const resetButton = document.createElement("button");
-                resetButton.textContent = "🔄 Сбросить к умолчаниям";
-                resetButton.style.padding = "12px 24px";
+                resetButton.textContent = withIcon("🔄", "Сбросить к умолчаниям");
+                resetButton.style.padding = compactMode ? "10px 18px" : "12px 24px";
                 resetButton.style.background = "#4E5058";
                 resetButton.style.color = "white";
                 resetButton.style.border = "none";
                 resetButton.style.borderRadius = "6px";
                 resetButton.style.cursor = "pointer";
                 resetButton.style.fontWeight = "600";
-                resetButton.style.fontSize = "14px";
-                resetButton.style.transition = "background 0.2s";
+                resetButton.style.fontSize = `${labelFontSize}px`;
+                resetButton.style.transition = `background ${animationMs}ms`;
                 resetButton.onmouseenter = () => resetButton.style.background = "#5D5F66";
                 resetButton.onmouseleave = () => resetButton.style.background = "#4E5058";
 

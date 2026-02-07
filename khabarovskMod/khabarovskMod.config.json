@@ -53,7 +53,15 @@
             "theme": "dark",
             "compactMode": false,
             "showIcons": true,
-            "animationSpeed": "normal"
+            "animationSpeed": "normal",
+            "panelMaxWidth": 800,
+            "baseFontSize": 14,
+            "sectionSpacing": 10,
+            "sectionPadding": 15,
+            "inputPaddingY": 10,
+            "inputPaddingX": 12,
+            "borderRadius": 8,
+            "accentColor": "#5865F2"
         },
         "advanced": {
             "confirmActions": false,
