@@ -1,46 +1,40 @@
-MIT License
+Custom License (khabarovskMod)
 
 Copyright (c) 2026 Jeredpoi (Максим Паль!?)
 
 English (official):
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1) Grant of use. You are allowed to use this plugin for personal moderation
+   purposes on Discord servers, including servers of the BlackRussia project.
+2) Limited redistribution. Redistribution is allowed only between members of the
+   project team. Any public distribution or rehosting still requires explicit
+   written permission from the author and must include a clear attribution to
+   the original repository: https://github.com/Jeredpoi/khabarovskMod
+3) No modification distribution. You may not distribute modified versions of
+   the plugin. Any changes you make are for personal use only.
+4) Attribution required. You must not remove or change the author name or
+   copyright notice in the plugin files.
+5) No commercial use. коммерческое использование запрещено.
+6) No warranty. The software is provided "as is", without warranty of any kind.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+By using the plugin, you agree to these terms.
 
 ---
 
-Русский (перевод, справочно):
-Настоящим предоставляется бесплатное разрешение любому лицу, получившему копию
-данного программного обеспечения и сопутствующей документации (далее — «ПО»),
-использовать ПО без ограничений, включая, помимо прочего, права на использование,
-копирование, изменение, объединение, публикацию, распространение, сублицензирование
-и/или продажу копий ПО, а также разрешать лицам, которым предоставляется ПО,
-делать это при соблюдении следующих условий:
+Русский (официально):
+1) Разрешено использование. Разрешается использовать плагин для личных целей
+   модерации на серверах Discord, включая сервера проекта BlackRussia.
+2) Ограниченное распространение. Распространение разрешено только между участниками
+   команды проекта. Любое публичное распространение или перезалив требует
+   письменного разрешения автора и обязано содержать явную ссылку на оригинальный
+   репозиторий: https://github.com/Jeredpoi/khabarovskMod
+3) Запрещено распространение модификаций. Любые изменения допускаются только
+   для личного использования и не могут распространяться.
+4) Указание авторства обязательно. Запрещено удалять или изменять имя автора и
+   уведомления об авторских правах в файлах плагина.
+5) Коммерческое использование запрещено.
+6) Отказ от гарантий. Плагин предоставляется «как есть», без каких-либо гарантий.
 
-Указанное выше уведомление об авторском праве и данное уведомление о разрешении
-должны включаться во все копии или существенные части ПО.
-
-ПО предоставляется «как есть», без каких-либо гарантий, явных или подразумеваемых,
-включая, но не ограничиваясь, гарантии товарной пригодности, соответствия
-определенной цели и отсутствия нарушений прав. Ни при каких обстоятельствах
-авторы или правообладатели не несут ответственности по каким-либо претензиям,
-ущербу или иной ответственности, возникающей из, вследствие или в связи с ПО
-или использованием ПО, либо другими действиями с ПО, будь то по договору, деликту
-или иным образом.
+Используя плагин, вы соглашаетесь с этими условиями.
 
 ---
 
