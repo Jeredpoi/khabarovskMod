@@ -674,7 +674,7 @@ module.exports = (() => {
                     dateEnd = dateEndOverride;
                 }
                 if (typeKey === "oralWarning" || typeKey === "warning") {
-                    dateIssued = "";
+                    dateIssued = dateIssuedOverride || this.formatDate(now);
                     dateEnd = "";
                 }
 
@@ -1103,7 +1103,7 @@ module.exports = (() => {
                                 this.showToast("Выберите пункт правил или введите вручную", "error");
                                 return;
                             }
-                            const issued = includeDates ? this.formatDateFromISO(dateIssuedISO || defaultIssuedISO) : "";
+                            const issued = includeDates ? this.formatDateFromISO(dateIssuedISO || defaultIssuedISO) : this.formatDate(new Date());
                             const end = includeDates ? this.formatDateFromISO(dateEndISO || defaultEndISO) : "";
                             const text = this.buildPunishmentForm(typeKey, user, ruleValue, issued, end);
                             if (!text) {
