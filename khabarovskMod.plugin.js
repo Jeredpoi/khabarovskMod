@@ -203,7 +203,7 @@ module.exports = (() => {
                     punishmentsWithTextAndCopy: ["Предупреждение"],
                     punishmentsWithCopy: ["Мут 90 минут", "Бан 7-15 дней", "Перманентная блокировка"],
                     showNotifications: true,
-                    autoSave: false,
+                    autoSave: true,
                     commandSettings: {
                         defaultMuteTime: 90,
                         defaultBanTime: 7,
@@ -317,6 +317,13 @@ module.exports = (() => {
                         }
                         if (!mergedSettings.messageFormats.commands.clearMember && mergedSettings.messageFormats.commands.clearUser) {
                             mergedSettings.messageFormats.commands.clearMember = mergedSettings.messageFormats.commands.clearUser;
+                        }
+
+                        // Нормализация шаблона форм: ID должен быть числом без упоминания
+                        if (mergedSettings.formConfig?.template) {
+                            mergedSettings.formConfig.template = mergedSettings.formConfig.template
+                                .replaceAll("<@{userId}>", "{userId}")
+                                .replaceAll("<@!{userId}>", "{userId}");
                         }
 
                         // Загружаем кастомные правила
@@ -572,6 +579,26 @@ module.exports = (() => {
                 return `${d}.${m}.${y}`;
             }
 
+            formatTime(date) {
+                const h = String(date.getHours()).padStart(2, "0");
+                const min = String(date.getMinutes()).padStart(2, "0");
+                return `${h}:${min}`;
+            }
+
+            formatDateISO(date) {
+                const d = String(date.getDate()).padStart(2, "0");
+                const m = String(date.getMonth() + 1).padStart(2, "0");
+                const y = date.getFullYear();
+                return `${y}-${m}-${d}`;
+            }
+
+            formatDateFromISO(iso) {
+                if (!iso || !iso.includes("-")) return "";
+                const [y, m, d] = iso.split("-");
+                if (!y || !m || !d) return "";
+                return `${d}.${m}.${y}`;
+            }
+
             getUserTag(user) {
                 if (!user) return "Unknown";
                 if (typeof user.tag === "string" && user.tag.includes("#")) {
@@ -583,13 +610,13 @@ module.exports = (() => {
                 return user.username || `ID${user.id || "0"}`;
             }
 
-            buildPunishmentForm(typeKey, user, ruleIdOverride = null) {
+            buildPunishmentForm(typeKey, user, ruleIdOverride = null, dateIssuedOverride = null, dateEndOverride = null) {
                 const formConfig = this.settings?.formConfig || {};
                 const template = formConfig.template || "";
                 if (!template) return "";
 
                 const now = new Date();
-                const dateIssued = this.formatDate(now);
+                const dateIssued = dateIssuedOverride || this.formatDate(now);
 
                 let dateEnd = "";
                 if (typeKey === "mute") {
@@ -602,6 +629,9 @@ module.exports = (() => {
                     dateEnd = this.formatDate(end);
                 } else {
                     dateEnd = dateIssued;
+                }
+                if (dateEndOverride) {
+                    dateEnd = dateEndOverride;
                 }
 
                 const ruleId = ruleIdOverride || "____";
@@ -625,12 +655,379 @@ module.exports = (() => {
                     .replaceAll("{dateEnd}", dateEnd);
             }
 
+
+            addHistoryEntry(entry) {
+                try {
+                    const key = "punishmentHistory";
+                    const history = BdApi.Data.load(config.info.name, key) || [];
+                    history.push(entry);
+                    const max = this.settings?.advanced?.maxHistory || 50;
+                    const trimmed = history.slice(-max);
+                    BdApi.Data.save(config.info.name, key, trimmed);
+                } catch (e) {
+                    console.error("Ошибка сохранения истории:", e);
+                }
+            }
+
+            deleteHistoryEntry(index) {
+                try {
+                    const key = "punishmentHistory";
+                    const history = BdApi.Data.load(config.info.name, key) || [];
+                    if (index >= 0 && index < history.length) {
+                        history.splice(index, 1);
+                        BdApi.Data.save(config.info.name, key, history);
+                    }
+                } catch (e) {
+                    console.error("Ошибка удаления истории:", e);
+                }
+            }
+
+            showAddHistoryModal() {
+                const React = BdApi.React;
+                let userId = "";
+                let userTag = "";
+                let ruleId = "";
+                let punishment = "";
+                let dateIssued = "";
+                let timeIssued = "";
+                let dateEnd = "";
+
+                const input = (placeholder, onChange) =>
+                    React.createElement("input", {
+                        type: "text",
+                        placeholder,
+                        onChange: (e) => onChange(e.target.value.trim()),
+                        style: {
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #4E5058",
+                            background: "#2F3136",
+                            color: "#FFFFFF",
+                            fontSize: "14px",
+                            marginTop: "8px"
+                        }
+                    });
+
+                const content = React.createElement(
+                    "div",
+                    null,
+                    input("User ID (цифры)", v => userId = v),
+                    input("User Tag (name#0000)", v => userTag = v),
+                    input("Пункт правил (например 2.3)", v => ruleId = v),
+                    input("Наказание (например Мут)", v => punishment = v),
+                    input("Дата выдачи (DD.MM.YYYY)", v => dateIssued = v),
+                    input("Время выдачи (HH:MM)", v => timeIssued = v),
+                    input("Дата снятия (DD.MM.YYYY)", v => dateEnd = v)
+                );
+
+                BdApi.UI.showConfirmationModal(
+                    "Добавить запись истории",
+                    content,
+                    {
+                        confirmText: "Добавить",
+                        cancelText: "Отмена",
+                        onConfirm: () => {
+                            if (!userId || !punishment) {
+                                this.showToast("Заполните хотя бы User ID и наказание", "error");
+                                return;
+                            }
+                            this.addHistoryEntry({
+                                userId,
+                                userTag: userTag || `ID${userId}`,
+                                ruleId: ruleId || "____",
+                                punishment,
+                                dateIssued: dateIssued || this.formatDate(new Date()),
+                                timeIssued: timeIssued || this.formatTime(new Date()),
+                                dateEnd: dateEnd || dateIssued || this.formatDate(new Date())
+                            });
+                            this.showHistoryModal();
+                        }
+                    }
+                );
+            }
+
+            exportHistory(format) {
+                try {
+                    const history = BdApi.Data.load(config.info.name, "punishmentHistory") || [];
+                    const ts = new Date();
+                    const dateStamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, "0")}${String(ts.getDate()).padStart(2, "0")}`;
+                    const baseName = `khabarovskMod_history_${dateStamp}`;
+
+                    if (format === "json") {
+                        const content = JSON.stringify(history, null, 2);
+                        this.saveTextAsFile(`${baseName}.json`, content);
+                        this.showToast("История экспортирована в JSON", "success");
+                        return;
+                    }
+
+                    const lines = history.map((h, idx) => {
+                        const timePart = h.timeIssued ? ` ${h.timeIssued}` : "";
+                        return `${idx + 1}) ${h.dateIssued}${timePart} | ${h.punishment} | ${h.userId} | ${h.ruleId || "____"}`;
+                    }).join("\n");
+                    this.saveTextAsFile(`${baseName}.txt`, lines || "История пуста");
+                    this.showToast("История экспортирована в TXT", "success");
+                } catch (e) {
+                    this.showToast("Ошибка экспорта истории", "error");
+                }
+            }
+
+            saveTextAsFile(filename, content) {
+                try {
+                    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                } catch (e) {
+                    console.error("Ошибка сохранения файла:", e);
+                }
+            }
+
+            showHistoryModal() {
+                const history = BdApi.Data.load(config.info.name, "punishmentHistory") || [];
+                if (!history.length) {
+                    this.showToast("История пуста", "info");
+                    return;
+                }
+                const React = BdApi.React;
+                const items = history.map((h, idx) => {
+                    const timePart = h.timeIssued ? ` ${h.timeIssued}` : "";
+                    const line = `${idx + 1}) ${h.dateIssued}${timePart} | ${h.punishment} | ${h.userId} | ${h.ruleId || "____"}`;
+                    return React.createElement(
+                        "div",
+                        {
+                            key: `hist-${idx}`,
+                            style: { display: "flex", justifyContent: "space-between", gap: "10px", marginBottom: "6px" }
+                        },
+                        React.createElement("div", { style: { color: "#B9BBBE", flex: "1" } }, line),
+                        React.createElement("button", {
+                            onClick: () => {
+                                this.deleteHistoryEntry(idx);
+                                this.showHistoryModal();
+                            },
+                            style: {
+                                padding: "4px 8px",
+                                borderRadius: "4px",
+                                border: "1px solid #4E5058",
+                                background: "#2F3136",
+                                color: "#FFFFFF",
+                                cursor: "pointer"
+                            }
+                        }, "Удалить")
+                    );
+                });
+
+                const footer = React.createElement(
+                    "div",
+                    { style: { marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" } },
+                    React.createElement("button", {
+                        onClick: () => this.showAddHistoryModal(),
+                        style: {
+                            padding: "6px 12px",
+                            borderRadius: "4px",
+                            border: "1px solid #4E5058",
+                            background: "#2F3136",
+                            color: "#FFFFFF",
+                            cursor: "pointer"
+                        }
+                    }, "Добавить запись"),
+                    React.createElement("button", {
+                        onClick: () => this.exportHistory("txt"),
+                        style: {
+                            padding: "6px 12px",
+                            borderRadius: "4px",
+                            border: "1px solid #4E5058",
+                            background: "#2F3136",
+                            color: "#FFFFFF",
+                            cursor: "pointer"
+                        }
+                    }, "Экспорт TXT"),
+                    React.createElement("button", {
+                        onClick: () => this.exportHistory("json"),
+                        style: {
+                            padding: "6px 12px",
+                            borderRadius: "4px",
+                            border: "1px solid #4E5058",
+                            background: "#2F3136",
+                            color: "#FFFFFF",
+                            cursor: "pointer"
+                        }
+                    }, "Экспорт JSON")
+                );
+
+                BdApi.UI.showConfirmationModal(
+                    "История наказаний",
+                    React.createElement("div", null, ...items),
+                    { confirmText: "Закрыть", cancelText: "Очистить всё",
+                      onCancel: () => {
+                          BdApi.Data.save(config.info.name, "punishmentHistory", []);
+                      },
+                      footer: footer }
+                );
+            }
+
             getMenuChildren(returnValue) {
                 if (!returnValue || !returnValue.props) return null;
                 const children = returnValue.props.children;
                 if (Array.isArray(children)) return children;
                 if (children && Array.isArray(children.props?.children)) return children.props.children;
                 return null;
+            }
+
+            getRuleOptions() {
+                const options = [];
+                Object.keys(this.rules || {}).forEach(categoryKey => {
+                    const category = this.rules[categoryKey];
+                    Object.keys(category.rules || {}).forEach(ruleId => {
+                        const rule = category.rules[ruleId];
+                        options.push({
+                            value: ruleId,
+                            label: `${ruleId} — ${rule.text}`
+                        });
+                    });
+                });
+                return options;
+            }
+
+            showRuleSelectModal(typeKey, user) {
+                const options = this.getRuleOptions();
+                if (!options.length) {
+                    this.showToast("Список правил пуст", "error");
+                    return;
+                }
+
+                let selectedRule = "";
+                let manualRule = "";
+                let dateIssuedISO = "";
+                let dateEndISO = "";
+                const React = BdApi.React;
+                const now = new Date();
+                const defaultIssuedISO = this.formatDateISO(now);
+                let defaultEndISO = defaultIssuedISO;
+                if (typeKey === "mute") {
+                    const minutes = parseInt(this.settings?.commandSettings?.defaultMuteTime || 90, 10);
+                    defaultEndISO = this.formatDateISO(new Date(now.getTime() + minutes * 60 * 1000));
+                } else if (typeKey === "ban") {
+                    const days = parseInt(this.settings?.commandSettings?.defaultBanTime || 7, 10);
+                    defaultEndISO = this.formatDateISO(new Date(now.getTime() + days * 24 * 60 * 60 * 1000));
+                }
+                const select = React.createElement(
+                    "select",
+                    {
+                        defaultValue: "",
+                        onChange: (e) => { selectedRule = e.target.value; },
+                        style: {
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #4E5058",
+                            background: "#2F3136",
+                            color: "#FFFFFF",
+                            fontSize: "14px"
+                        }
+                    },
+                    [
+                        React.createElement("option", { key: "placeholder", value: "", disabled: true }, "Выберите пункт правил"),
+                        ...options.map((opt) => React.createElement("option", { key: opt.value, value: opt.value }, opt.label))
+                    ]
+                );
+
+                const manualInput = React.createElement(
+                    "input",
+                    {
+                        type: "text",
+                        placeholder: "Вставить правило вручную (например 2.3)",
+                        onChange: (e) => { manualRule = e.target.value.trim(); },
+                        style: {
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #4E5058",
+                            background: "#2F3136",
+                            color: "#FFFFFF",
+                            fontSize: "14px",
+                            marginTop: "10px"
+                        }
+                    }
+                );
+
+                const dateIssuedInput = React.createElement(
+                    "input",
+                    {
+                        type: "date",
+                        defaultValue: defaultIssuedISO,
+                        onChange: (e) => { dateIssuedISO = e.target.value; },
+                        style: {
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #4E5058",
+                            background: "#2F3136",
+                            color: "#FFFFFF",
+                            fontSize: "14px",
+                            marginTop: "10px"
+                        }
+                    }
+                );
+
+                const dateEndInput = React.createElement(
+                    "input",
+                    {
+                        type: "date",
+                        defaultValue: defaultEndISO,
+                        onChange: (e) => { dateEndISO = e.target.value; },
+                        style: {
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #4E5058",
+                            background: "#2F3136",
+                            color: "#FFFFFF",
+                            fontSize: "14px",
+                            marginTop: "10px"
+                        }
+                    }
+                );
+
+                const content = React.createElement(
+                    "div",
+                    null,
+                    React.createElement("div", { style: { marginBottom: "8px", color: "#B9BBBE" } }, "Выберите пункт правил для формы:"),
+                    select,
+                    React.createElement("div", { style: { marginTop: "10px", color: "#72767D", fontSize: "12px" } }, "Или укажите правило вручную:"),
+                    manualInput,
+                    React.createElement("div", { style: { marginTop: "12px", color: "#B9BBBE" } }, "Дата выдачи:"),
+                    dateIssuedInput,
+                    React.createElement("div", { style: { marginTop: "12px", color: "#B9BBBE" } }, "Дата снятия:"),
+                    dateEndInput
+                );
+
+                BdApi.UI.showConfirmationModal(
+                    "Выбор пункта правил",
+                    content,
+                    {
+                        confirmText: "Продолжить",
+                        cancelText: "Отмена",
+                        onConfirm: () => {
+                            const ruleValue = selectedRule || manualRule;
+                            if (!ruleValue) {
+                                this.showToast("Выберите пункт правил или введите вручную", "error");
+                                return;
+                            }
+                            const issued = this.formatDateFromISO(dateIssuedISO || defaultIssuedISO);
+                            const end = this.formatDateFromISO(dateEndISO || defaultEndISO);
+                            const text = this.buildPunishmentForm(typeKey, user, ruleValue, issued, end);
+                            if (!text) {
+                                this.showToast("Форма не настроена", "error");
+                                return;
+                            }
+                            this.insertTextIntoChat(text);
+                        }
+                    }
+                );
             }
 
             buildModerationMenuItems(user, messageId) {
@@ -706,16 +1103,7 @@ module.exports = (() => {
                         label: "Устное предупреждение",
                         id: "khabarovsk-form-oral",
                         action: () => {
-                            const text = this.buildPunishmentForm("oralWarning", user);
-                            if (!text) {
-                                this.showToast("Форма устного предупреждения не настроена", "error");
-                                return;
-                            }
-                            this.queueActionWithPreview(
-                                "Форма наказания: Устное предупреждение",
-                                text,
-                                () => this.insertTextIntoChat(text)
-                            );
+                            this.showRuleSelectModal("oralWarning", user);
                         }
                     },
                     {
@@ -723,16 +1111,7 @@ module.exports = (() => {
                         label: "Предупреждение",
                         id: "khabarovsk-form-warning",
                         action: () => {
-                            const text = this.buildPunishmentForm("warning", user);
-                            if (!text) {
-                                this.showToast("Форма предупреждения не настроена", "error");
-                                return;
-                            }
-                            this.queueActionWithPreview(
-                                "Форма наказания: Предупреждение",
-                                text,
-                                () => this.insertTextIntoChat(text)
-                            );
+                            this.showRuleSelectModal("warning", user);
                         }
                     },
                     {
@@ -740,16 +1119,7 @@ module.exports = (() => {
                         label: "Мут",
                         id: "khabarovsk-form-mute",
                         action: () => {
-                            const text = this.buildPunishmentForm("mute", user);
-                            if (!text) {
-                                this.showToast("Форма мута не настроена", "error");
-                                return;
-                            }
-                            this.queueActionWithPreview(
-                                "Форма наказания: Мут",
-                                text,
-                                () => this.insertTextIntoChat(text)
-                            );
+                            this.showRuleSelectModal("mute", user);
                         }
                     },
                     {
@@ -757,16 +1127,7 @@ module.exports = (() => {
                         label: "Бан",
                         id: "khabarovsk-form-ban",
                         action: () => {
-                            const text = this.buildPunishmentForm("ban", user);
-                            if (!text) {
-                                this.showToast("Форма бана не настроена", "error");
-                                return;
-                            }
-                            this.queueActionWithPreview(
-                                "Форма наказания: Бан",
-                                text,
-                                () => this.insertTextIntoChat(text)
-                            );
+                            this.showRuleSelectModal("ban", user);
                         }
                     }
                 ];
@@ -779,6 +1140,13 @@ module.exports = (() => {
                         items: formsItems
                     });
                 }
+
+                toolsItems.push({
+                    type: "item",
+                    label: "📜 История наказаний",
+                    id: "khabarovsk-history",
+                    action: () => this.showHistoryModal()
+                });
 
                 const cleanupItems = [];
                 if (messageId) {
@@ -1576,6 +1944,9 @@ module.exports = (() => {
 
                     let messageContent;
                     let commandContent;
+                    const now = new Date();
+                    const dateIssued = this.formatDate(now);
+                    const timeIssued = this.formatTime(now);
 
                     // Проверяем, нужно ли отправлять автоматически
                     if (this.settings.punishmentsWithText.includes(punishment)) {
@@ -1596,6 +1967,15 @@ module.exports = (() => {
                                 this.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, "success");
                             }
                         );
+                        this.addHistoryEntry({
+                            userId: user.id,
+                            userTag: this.getUserTag(user),
+                            ruleId,
+                            punishment,
+                            dateIssued,
+                            timeIssued,
+                            dateEnd: dateIssued
+                        });
                     } else if (this.settings.punishmentsWithTextAndCopy.includes(punishment)) {
                         const channelId = this.getCurrentChannelId();
                         if (!channelId) return;
@@ -1626,6 +2006,15 @@ module.exports = (() => {
                                 this.showToast(`Отправлено: ${punishment} по пункту ${ruleId}`, "success");
                             }
                         );
+                        this.addHistoryEntry({
+                            userId: user.id,
+                            userTag: this.getUserTag(user),
+                            ruleId,
+                            punishment,
+                            dateIssued,
+                            timeIssued,
+                            dateEnd: dateIssued
+                        });
                     } else if (this.settings.punishmentsWithCopy.includes(punishment)) {
                         // Проверяем наличие команд перед использованием
                         if (punishment === "Мут 90 минут") {
@@ -1661,6 +2050,15 @@ module.exports = (() => {
                                 () => this.insertTextIntoChat(commandContent)
                             );
                         }
+                        this.addHistoryEntry({
+                            userId: user.id,
+                            userTag: this.getUserTag(user),
+                            ruleId,
+                            punishment,
+                            dateIssued,
+                            timeIssued,
+                            dateEnd: dateIssued
+                        });
                     } else {
                         // Для остальных наказаний - копируем информацию в буфер
                         messageContent = this.settings.messageFormats.withText
@@ -1673,6 +2071,15 @@ module.exports = (() => {
                             `Сообщение: ${messageContent}`,
                             () => this.insertTextIntoChat(messageContent)
                         );
+                        this.addHistoryEntry({
+                            userId: user.id,
+                            userTag: this.getUserTag(user),
+                            ruleId,
+                            punishment,
+                            dateIssued,
+                            timeIssued,
+                            dateEnd: dateIssued
+                        });
                     }
 
                 } catch (error) {
