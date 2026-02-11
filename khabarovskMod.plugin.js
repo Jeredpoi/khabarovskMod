@@ -17,11 +17,10 @@ module.exports = (() => {
         },
         changelog: [
                 {
-                    title: "Частые правила",
+                    title: "Новые функции",
                     type: "added",
                     items: [
-                        "Добавлена подсветка часто используемых пунктов правил прямо в меню",
-                        "Добавлен быстрый блок \"Частые пункты\" вверху меню модерации"
+                        "Добавлен блок «Недавние наказания» в инструменты модерации для быстрого повторного применения по текущему пользователю"
                     ]
                 },
                 {
@@ -52,7 +51,7 @@ module.exports = (() => {
                 title: "Исправления",
                 type: "fixed",
                 items: [
-                    "Для устного предупреждения скрывается дата снятия, для предупреждения поле даты снятия сохраняется"
+                    "Для устного предупреждения и предупреждения скрыта дата снятия, дата выдачи ставится автоматически"
                 ]
             }
         ]
@@ -260,8 +259,7 @@ module.exports = (() => {
                         confirmActions: false,
                         showPreview: true,
                         maxHistory: 50,
-                        showFrequentRules: true,
-                        frequentRulesLimit: 5
+                        recentPunishmentsLimit: 7
                     },
                     formConfig: {
                         moderatorNick: "Ваш_Nick_Name",
@@ -470,8 +468,7 @@ module.exports = (() => {
                                 showPreview: true,
                                 maxHistory: 50,
                                 enableShortcuts: false,
-                                showFrequentRules: true,
-                                frequentRulesLimit: 5
+                                recentPunishmentsLimit: 7
                             }
                         },
                         customRules: customRules
@@ -782,24 +779,32 @@ module.exports = (() => {
                 }
             }
 
-            getHistoryEntries() {
-                return BdApi.Data.load(config.info.name, "punishmentHistory") || [];
-            }
+            getRecentPunishmentEntries(limit = 7) {
+                const history = BdApi.Data.load(config.info.name, "punishmentHistory") || [];
+                const seen = new Set();
+                const result = [];
+                const max = Math.max(1, parseInt(limit, 10) || 7);
 
-            getFrequentRuleCounts(limit = 5) {
-                const history = this.getHistoryEntries();
-                const counter = new Map();
+                for (let i = history.length - 1; i >= 0; i--) {
+                    const item = history[i] || {};
+                    const ruleId = String(item.ruleId || "").trim();
+                    const punishment = String(item.punishment || "").trim();
+                    if (!ruleId || ruleId === "____" || !punishment) continue;
 
-                history.forEach((entry) => {
-                    const ruleId = String(entry?.ruleId || "").trim();
-                    if (!ruleId || ruleId === "____") return;
-                    counter.set(ruleId, (counter.get(ruleId) || 0) + 1);
-                });
+                    const key = `${ruleId}::${punishment}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
 
-                return Array.from(counter.entries())
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, Math.max(1, limit))
-                    .map(([ruleId, count]) => ({ ruleId, count }));
+                    result.push({
+                        ruleId,
+                        punishment,
+                        dateIssued: item.dateIssued || "",
+                        timeIssued: item.timeIssued || ""
+                    });
+
+                    if (result.length >= max) break;
+                }
+                return result;
             }
 
             showAddHistoryModal() {
@@ -1195,41 +1200,27 @@ module.exports = (() => {
             buildModerationMenuItems(user, messageId) {
                 const showIcons = this.settings.ui?.showIcons !== false;
                 const withIcon = (icon, text) => showIcons ? `${icon} ${text}` : text;
-                const showFrequentRules = this.settings?.advanced?.showFrequentRules !== false;
-                const frequentRulesLimit = Math.max(
-                    1,
-                    parseInt(this.settings?.advanced?.frequentRulesLimit || 5, 10) || 5
-                );
-                const frequentRuleCounts = this.getFrequentRuleCounts(200);
-                const frequentRuleMap = new Map(frequentRuleCounts.map((item) => [item.ruleId, item.count]));
-
+                const recentPunishmentsLimit = this.settings?.advanced?.recentPunishmentsLimit || 7;
                 const buildForUser = (template, extra = {}) => this.formatTemplate(template, {
                     userId: user.id,
                     userTag: this.getUserTag(user),
                     messageId: messageId || "",
                     ...extra
                 });
-                const buildPunishmentItems = (ruleId, rule) => {
-                    return rule.punishments.map((punishment, idx) => ({
-                        type: "item",
-                        label: punishment.name,
-                        id: `punishment-${ruleId}-${idx}`,
-                        action: () => this.executePunishment(user, ruleId, punishment.name)
-                    }));
-                };
                 const categoryItems = Object.keys(this.rules).map(categoryKey => {
                     const category = this.rules[categoryKey];
                     const ruleItems = Object.keys(category.rules).map(ruleId => {
                         const rule = category.rules[ruleId];
-                        const punishmentItems = buildPunishmentItems(ruleId, rule);
-                        const freqCount = frequentRuleMap.get(ruleId) || 0;
-                        const highlightedLabel = (showFrequentRules && freqCount > 0)
-                            ? `${rule.text} (${freqCount})`
-                            : rule.text;
+                        const punishmentItems = rule.punishments.map((punishment, idx) => ({
+                            type: "item",
+                            label: punishment.name,
+                            id: `punishment-${ruleId}-${idx}`,
+                            action: () => this.executePunishment(user, ruleId, punishment.name)
+                        }));
 
                         return {
                             type: "submenu",
-                            label: showFrequentRules && freqCount > 0 ? withIcon("🔥", highlightedLabel) : highlightedLabel,
+                            label: rule.text,
                             id: `rule-${categoryKey}-${ruleId}`,
                             items: punishmentItems
                         };
@@ -1336,6 +1327,27 @@ module.exports = (() => {
                     });
                 }
 
+                const recentPunishments = this.getRecentPunishmentEntries(recentPunishmentsLimit);
+                if (recentPunishments.length) {
+                    const recentItems = recentPunishments.map((entry, idx) => {
+                        const timePart = entry.timeIssued ? ` ${entry.timeIssued}` : "";
+                        const datePart = entry.dateIssued ? ` • ${entry.dateIssued}${timePart}` : "";
+                        return {
+                            type: "item",
+                            label: `${entry.punishment} • ${entry.ruleId}${datePart}`,
+                            id: `khabarovsk-recent-punishment-${idx}`,
+                            action: () => this.executePunishment(user, entry.ruleId, entry.punishment)
+                        };
+                    });
+
+                    toolsItems.push({
+                        type: "submenu",
+                        label: withIcon("🕘", "Недавние наказания"),
+                        id: "khabarovsk-recent-punishments",
+                        items: recentItems
+                    });
+                }
+
                 toolsItems.push({
                     type: "item",
                     label: withIcon("📜", "История наказаний"),
@@ -1397,36 +1409,8 @@ module.exports = (() => {
                     id: "khabarovsk-moderation-tools",
                     items: toolsItems
                 };
-                const frequentItems = [];
-                if (showFrequentRules) {
-                    const topFrequent = frequentRuleCounts.slice(0, frequentRulesLimit);
-                    topFrequent.forEach(({ ruleId, count }) => {
-                        for (const categoryKey of Object.keys(this.rules)) {
-                            const category = this.rules[categoryKey];
-                            const rule = category?.rules?.[ruleId];
-                            if (!rule) continue;
-                            frequentItems.push({
-                                type: "submenu",
-                                label: `${rule.text} (${count})`,
-                                id: `khabarovsk-frequent-${ruleId}`,
-                                items: buildPunishmentItems(ruleId, rule)
-                            });
-                            break;
-                        }
-                    });
-                }
 
-                const topItems = [];
-                if (frequentItems.length) {
-                    topItems.push({
-                        type: "submenu",
-                        label: withIcon("🔥", "Частые пункты"),
-                        id: "khabarovsk-frequent-rules",
-                        items: frequentItems
-                    });
-                }
-
-                return [...topItems, ...categoryItems, toolsMenuItem];
+                return [...categoryItems, toolsMenuItem];
             }
 
             getSettingsPanel() {
@@ -1919,23 +1903,6 @@ module.exports = (() => {
                 );
                 advancedSection.content.appendChild(showPreviewToggle.container);
 
-                const showFrequentRulesToggle = createToggle(
-                    "Подсвечивать частые пункты",
-                    this.settings.advanced?.showFrequentRules !== false,
-                    "Показывать частые пункты правил вверху меню и подсвечивать их"
-                );
-                advancedSection.content.appendChild(showFrequentRulesToggle.container);
-
-                const frequentRulesLimitField = createInputField(
-                    "Сколько частых пунктов показывать:",
-                    this.settings.advanced?.frequentRulesLimit || 5,
-                    "Количество быстрых пунктов в блоке \"Частые пункты\""
-                );
-                frequentRulesLimitField.input.type = "number";
-                frequentRulesLimitField.input.min = "1";
-                frequentRulesLimitField.input.max = "20";
-                advancedSection.content.appendChild(frequentRulesLimitField.container);
-
                 // Если автосохранение включено, добавляем обработчики
                 if (this.settings.autoSave) {
                     const allInputs = [
@@ -2281,11 +2248,6 @@ module.exports = (() => {
                         if (!this.settings.advanced) this.settings.advanced = {};
                         this.settings.advanced.confirmActions = confirmActionsToggle.toggle.getValue();
                         this.settings.advanced.showPreview = showPreviewToggle.toggle.getValue();
-                        this.settings.advanced.showFrequentRules = showFrequentRulesToggle.toggle.getValue();
-                        this.settings.advanced.frequentRulesLimit = Math.max(
-                            1,
-                            Math.min(20, parseInt(frequentRulesLimitField.input.value, 10) || 5)
-                        );
 
                         // Сохраняем настройки команд
                         if (!this.settings.commandSettings) this.settings.commandSettings = {};
