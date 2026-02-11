@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 1.2.0
+ * @version 1.2.1
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://raw.githubusercontent.com/Jeredpoi/khabarovskMod/main/khabarovskMod.plugin.js
@@ -12,10 +12,18 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-                version: "1.2.0",
+                version: "1.2.1",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
+                {
+                    title: "Частые правила",
+                    type: "added",
+                    items: [
+                        "Добавлена подсветка часто используемых пунктов правил прямо в меню",
+                        "Добавлен быстрый блок \"Частые пункты\" вверху меню модерации"
+                    ]
+                },
                 {
                     title: "Улучшения",
                     type: "improved",
@@ -44,7 +52,7 @@ module.exports = (() => {
                 title: "Исправления",
                 type: "fixed",
                 items: [
-                    "Для устного предупреждения и предупреждения скрыта дата снятия, дата выдачи ставится автоматически"
+                    "Для устного предупреждения скрывается дата снятия, для предупреждения поле даты снятия сохраняется"
                 ]
             }
         ]
@@ -251,7 +259,9 @@ module.exports = (() => {
                     advanced: {
                         confirmActions: false,
                         showPreview: true,
-                        maxHistory: 50
+                        maxHistory: 50,
+                        showFrequentRules: true,
+                        frequentRulesLimit: 5
                     },
                     formConfig: {
                         moderatorNick: "Ваш_Nick_Name",
@@ -459,7 +469,9 @@ module.exports = (() => {
                                 confirmActions: false,
                                 showPreview: true,
                                 maxHistory: 50,
-                                enableShortcuts: false
+                                enableShortcuts: false,
+                                showFrequentRules: true,
+                                frequentRulesLimit: 5
                             }
                         },
                         customRules: customRules
@@ -768,6 +780,26 @@ module.exports = (() => {
                 } catch (e) {
                     console.error("Ошибка удаления истории:", e);
                 }
+            }
+
+            getHistoryEntries() {
+                return BdApi.Data.load(config.info.name, "punishmentHistory") || [];
+            }
+
+            getFrequentRuleCounts(limit = 5) {
+                const history = this.getHistoryEntries();
+                const counter = new Map();
+
+                history.forEach((entry) => {
+                    const ruleId = String(entry?.ruleId || "").trim();
+                    if (!ruleId || ruleId === "____") return;
+                    counter.set(ruleId, (counter.get(ruleId) || 0) + 1);
+                });
+
+                return Array.from(counter.entries())
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, Math.max(1, limit))
+                    .map(([ruleId, count]) => ({ ruleId, count }));
             }
 
             showAddHistoryModal() {
@@ -1163,26 +1195,41 @@ module.exports = (() => {
             buildModerationMenuItems(user, messageId) {
                 const showIcons = this.settings.ui?.showIcons !== false;
                 const withIcon = (icon, text) => showIcons ? `${icon} ${text}` : text;
+                const showFrequentRules = this.settings?.advanced?.showFrequentRules !== false;
+                const frequentRulesLimit = Math.max(
+                    1,
+                    parseInt(this.settings?.advanced?.frequentRulesLimit || 5, 10) || 5
+                );
+                const frequentRuleCounts = this.getFrequentRuleCounts(200);
+                const frequentRuleMap = new Map(frequentRuleCounts.map((item) => [item.ruleId, item.count]));
+
                 const buildForUser = (template, extra = {}) => this.formatTemplate(template, {
                     userId: user.id,
                     userTag: this.getUserTag(user),
                     messageId: messageId || "",
                     ...extra
                 });
+                const buildPunishmentItems = (ruleId, rule) => {
+                    return rule.punishments.map((punishment, idx) => ({
+                        type: "item",
+                        label: punishment.name,
+                        id: `punishment-${ruleId}-${idx}`,
+                        action: () => this.executePunishment(user, ruleId, punishment.name)
+                    }));
+                };
                 const categoryItems = Object.keys(this.rules).map(categoryKey => {
                     const category = this.rules[categoryKey];
                     const ruleItems = Object.keys(category.rules).map(ruleId => {
                         const rule = category.rules[ruleId];
-                        const punishmentItems = rule.punishments.map((punishment, idx) => ({
-                            type: "item",
-                            label: punishment.name,
-                            id: `punishment-${ruleId}-${idx}`,
-                            action: () => this.executePunishment(user, ruleId, punishment.name)
-                        }));
+                        const punishmentItems = buildPunishmentItems(ruleId, rule);
+                        const freqCount = frequentRuleMap.get(ruleId) || 0;
+                        const highlightedLabel = (showFrequentRules && freqCount > 0)
+                            ? `${rule.text} (${freqCount})`
+                            : rule.text;
 
                         return {
                             type: "submenu",
-                            label: rule.text,
+                            label: showFrequentRules && freqCount > 0 ? withIcon("🔥", highlightedLabel) : highlightedLabel,
                             id: `rule-${categoryKey}-${ruleId}`,
                             items: punishmentItems
                         };
@@ -1350,8 +1397,36 @@ module.exports = (() => {
                     id: "khabarovsk-moderation-tools",
                     items: toolsItems
                 };
+                const frequentItems = [];
+                if (showFrequentRules) {
+                    const topFrequent = frequentRuleCounts.slice(0, frequentRulesLimit);
+                    topFrequent.forEach(({ ruleId, count }) => {
+                        for (const categoryKey of Object.keys(this.rules)) {
+                            const category = this.rules[categoryKey];
+                            const rule = category?.rules?.[ruleId];
+                            if (!rule) continue;
+                            frequentItems.push({
+                                type: "submenu",
+                                label: `${rule.text} (${count})`,
+                                id: `khabarovsk-frequent-${ruleId}`,
+                                items: buildPunishmentItems(ruleId, rule)
+                            });
+                            break;
+                        }
+                    });
+                }
 
-                return [...categoryItems, toolsMenuItem];
+                const topItems = [];
+                if (frequentItems.length) {
+                    topItems.push({
+                        type: "submenu",
+                        label: withIcon("🔥", "Частые пункты"),
+                        id: "khabarovsk-frequent-rules",
+                        items: frequentItems
+                    });
+                }
+
+                return [...topItems, ...categoryItems, toolsMenuItem];
             }
 
             getSettingsPanel() {
@@ -1844,6 +1919,23 @@ module.exports = (() => {
                 );
                 advancedSection.content.appendChild(showPreviewToggle.container);
 
+                const showFrequentRulesToggle = createToggle(
+                    "Подсвечивать частые пункты",
+                    this.settings.advanced?.showFrequentRules !== false,
+                    "Показывать частые пункты правил вверху меню и подсвечивать их"
+                );
+                advancedSection.content.appendChild(showFrequentRulesToggle.container);
+
+                const frequentRulesLimitField = createInputField(
+                    "Сколько частых пунктов показывать:",
+                    this.settings.advanced?.frequentRulesLimit || 5,
+                    "Количество быстрых пунктов в блоке \"Частые пункты\""
+                );
+                frequentRulesLimitField.input.type = "number";
+                frequentRulesLimitField.input.min = "1";
+                frequentRulesLimitField.input.max = "20";
+                advancedSection.content.appendChild(frequentRulesLimitField.container);
+
                 // Если автосохранение включено, добавляем обработчики
                 if (this.settings.autoSave) {
                     const allInputs = [
@@ -2189,6 +2281,11 @@ module.exports = (() => {
                         if (!this.settings.advanced) this.settings.advanced = {};
                         this.settings.advanced.confirmActions = confirmActionsToggle.toggle.getValue();
                         this.settings.advanced.showPreview = showPreviewToggle.toggle.getValue();
+                        this.settings.advanced.showFrequentRules = showFrequentRulesToggle.toggle.getValue();
+                        this.settings.advanced.frequentRulesLimit = Math.max(
+                            1,
+                            Math.min(20, parseInt(frequentRulesLimitField.input.value, 10) || 5)
+                        );
 
                         // Сохраняем настройки команд
                         if (!this.settings.commandSettings) this.settings.commandSettings = {};
