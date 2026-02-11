@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 1.1.1b
+ * @version 1.2.0
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://raw.githubusercontent.com/Jeredpoi/khabarovskMod/main/khabarovskMod.plugin.js
@@ -12,10 +12,25 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-            version: "1.1.1b",
+                version: "1.2.0",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
+                {
+                    title: "Улучшения",
+                    type: "improved",
+                    items: [
+                        "Добавлен единый шаблонизатор переменных для команд, сообщений и форм (меньше дублирования кода)",
+                        "Оптимизирована генерация команд в инструментах модерации и выдаче наказаний"
+                    ]
+                },
+                {
+                    title: "Новые инструменты",
+                    type: "added",
+                    items: [
+                        "В меню модерации добавлены быстрые действия: копировать ID пользователя и упоминание"
+                    ]
+                },
             {
                 title: "Новые функции",
                 type: "added",
@@ -645,6 +660,27 @@ module.exports = (() => {
                 return user.username || `ID${user.id || "0"}`;
             }
 
+            formatTemplate(template, variables = {}) {
+                if (typeof template !== "string" || !template) return "";
+                return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+                    if (!Object.prototype.hasOwnProperty.call(variables, key)) return match;
+                    const value = variables[key];
+                    return value === undefined || value === null ? "" : String(value);
+                });
+            }
+
+            removeDateEndLine(formText) {
+                if (typeof formText !== "string" || !formText) return "";
+                const lines = formText.split(/\r?\n/);
+                const filtered = lines.filter((line) => {
+                    const normalized = String(line || "").toLowerCase();
+                    if (!normalized.trim()) return true;
+                    if (normalized.includes("{dateend}")) return false;
+                    return !normalized.includes("дата снятия");
+                });
+                return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+            }
+
             buildPunishmentForm(typeKey, user, ruleIdOverride = null, dateIssuedOverride = null, dateEndOverride = null) {
                 const formConfig = this.settings?.formConfig || {};
                 const template = formConfig.template || "";
@@ -673,9 +709,12 @@ module.exports = (() => {
                 if (dateEndOverride) {
                     dateEnd = dateEndOverride;
                 }
-                if (typeKey === "oralWarning" || typeKey === "warning") {
+                if (typeKey === "oralWarning") {
                     dateIssued = dateIssuedOverride || this.formatDate(now);
                     dateEnd = "";
+                } else if (typeKey === "warning") {
+                    dateIssued = dateIssuedOverride || this.formatDate(now);
+                    dateEnd = dateEndOverride || dateIssued;
                 }
 
                 const ruleId = ruleIdOverride || "____";
@@ -689,14 +728,19 @@ module.exports = (() => {
                             ? "Мут"
                             : "Бан";
 
-                return this._formTemplateCache
-                    .replaceAll("{userId}", user.id)
-                    .replaceAll("{userTag}", userTag)
-                    .replaceAll("{ruleId}", ruleId)
-                    .replaceAll("{punishment}", punishmentLabel)
-                    .replaceAll("{moderatorNick}", moderatorNick)
-                    .replaceAll("{dateIssued}", dateIssued)
-                    .replaceAll("{dateEnd}", dateEnd);
+                const renderedForm = this.formatTemplate(this._formTemplateCache, {
+                    userId: user.id,
+                    userTag,
+                    ruleId,
+                    punishment: punishmentLabel,
+                    moderatorNick,
+                    dateIssued,
+                    dateEnd
+                });
+                if (typeKey === "oralWarning" && !dateEnd) {
+                    return this.removeDateEndLine(renderedForm);
+                }
+                return renderedForm;
             }
 
 
@@ -1119,6 +1163,12 @@ module.exports = (() => {
             buildModerationMenuItems(user, messageId) {
                 const showIcons = this.settings.ui?.showIcons !== false;
                 const withIcon = (icon, text) => showIcons ? `${icon} ${text}` : text;
+                const buildForUser = (template, extra = {}) => this.formatTemplate(template, {
+                    userId: user.id,
+                    userTag: this.getUserTag(user),
+                    messageId: messageId || "",
+                    ...extra
+                });
                 const categoryItems = Object.keys(this.rules).map(categoryKey => {
                     const category = this.rules[categoryKey];
                     const ruleItems = Object.keys(category.rules).map(ruleId => {
@@ -1156,8 +1206,7 @@ module.exports = (() => {
                                 this.showToast("Формат команды /user не найден в настройках", "error");
                                 return;
                             }
-                            const commandContent = this.settings.messageFormats.commands.user
-                                .replace("{userId}", user.id);
+                            const commandContent = buildForUser(this.settings.messageFormats.commands.user);
                             this.queueActionWithPreview(
                                 "Инструмент /user",
                                 `Команда: ${commandContent}`,
@@ -1174,14 +1223,25 @@ module.exports = (() => {
                                 this.showToast("Формат команды /punish не найден в настройках", "error");
                                 return;
                             }
-                            const commandContent = this.settings.messageFormats.commands.punish
-                                .replace("{userId}", user.id);
+                            const commandContent = buildForUser(this.settings.messageFormats.commands.punish);
                             this.queueActionWithPreview(
                                 "Инструмент /punish",
                                 `Команда: ${commandContent}`,
                                 () => this.insertTextIntoChat(commandContent)
                             );
                         }
+                    },
+                    {
+                        type: "item",
+                        label: withIcon("🆔", "Копировать ID"),
+                        id: "khabarovsk-tool-copy-id",
+                        action: () => this.insertTextIntoChat(String(user.id))
+                    },
+                    {
+                        type: "item",
+                        label: withIcon("👤", "Копировать упоминание"),
+                        id: "khabarovsk-tool-copy-mention",
+                        action: () => this.insertTextIntoChat(`<@${user.id}>`)
                     }
                 ];
 
@@ -1248,9 +1308,7 @@ module.exports = (() => {
                                 this.showToast("Формат команды clear one не найден в настройках", "error");
                                 return;
                             }
-                            const commandContent = clearOne
-                                .replace("{messageId}", messageId)
-                                .replace("{userId}", user.id);
+                            const commandContent = buildForUser(clearOne, { messageId });
                             this.queueActionWithPreview(
                                 "Очистка сообщения",
                                 `Команда: ${commandContent}`,
@@ -1268,8 +1326,7 @@ module.exports = (() => {
                             this.showToast("Формат команды clear member не найден в настройках", "error");
                             return;
                         }
-                        const commandContent = this.settings.messageFormats.commands.clearMember
-                            .replace("{userId}", user.id);
+                        const commandContent = buildForUser(this.settings.messageFormats.commands.clearMember);
                         this.queueActionWithPreview(
                             "Очистка сообщений пользователя",
                             `Команда: ${commandContent}`,
@@ -2294,10 +2351,11 @@ module.exports = (() => {
                         if (!channelId) return;
 
                         // Предупреждения - отправляем автоматически
-                        messageContent = this.settings.messageFormats.withText
-                            .replace("{userId}", user.id)
-                            .replace("{punishment}", punishment)
-                            .replace("{ruleId}", ruleId);
+                        messageContent = this.formatTemplate(this.settings.messageFormats.withText, {
+                            userId: user.id,
+                            punishment,
+                            ruleId
+                        });
 
                         this.queueActionWithPreview(
                             "Подтверждение наказания",
@@ -2327,14 +2385,16 @@ module.exports = (() => {
                         }
 
                         // Предупреждения - отправляем автоматически
-                        messageContent = this.settings.messageFormats.withText
-                            .replace("{userId}", user.id)
-                            .replace("{punishment}", punishment)
-                            .replace("{ruleId}", ruleId);
+                        messageContent = this.formatTemplate(this.settings.messageFormats.withText, {
+                            userId: user.id,
+                            punishment,
+                            ruleId
+                        });
 
-                        commandContent = this.settings.messageFormats.commands.warn
-                            .replace("{userId}", user.id)
-                            .replace("{ruleId}", ruleId);
+                        commandContent = this.formatTemplate(this.settings.messageFormats.commands.warn, {
+                            userId: user.id,
+                            ruleId
+                        });
 
                         const preview = `Команда: ${commandContent}\nСообщение: ${messageContent}`;
                         this.queueActionWithPreview(
@@ -2362,25 +2422,28 @@ module.exports = (() => {
                                 this.showToast("Формат команды /mute не найден в настройках", "error");
                                 return;
                             }
-                            commandContent = this.settings.messageFormats.commands.mute
-                                .replace("{userId}", user.id)
-                                .replace("{ruleId}", ruleId);
+                            commandContent = this.formatTemplate(this.settings.messageFormats.commands.mute, {
+                                userId: user.id,
+                                ruleId
+                            });
                         } else if (punishment === "Бан 7-15 дней") {
                             if (!this.settings.messageFormats?.commands?.ban) {
                                 this.showToast("Формат команды /ban не найден в настройках", "error");
                                 return;
                             }
-                            commandContent = this.settings.messageFormats.commands.ban
-                                .replace("{userId}", user.id)
-                                .replace("{ruleId}", ruleId);
+                            commandContent = this.formatTemplate(this.settings.messageFormats.commands.ban, {
+                                userId: user.id,
+                                ruleId
+                            });
                         } else if (punishment === "Перманентная блокировка") {
                             if (!this.settings.messageFormats?.commands?.permban) {
                                 this.showToast("Формат команды /permban не найден в настройках", "error");
                                 return;
                             }
-                            commandContent = this.settings.messageFormats.commands.permban
-                                .replace("{userId}", user.id)
-                                .replace("{ruleId}", ruleId);
+                            commandContent = this.formatTemplate(this.settings.messageFormats.commands.permban, {
+                                userId: user.id,
+                                ruleId
+                            });
                         }
 
                         if (commandContent) {
@@ -2401,10 +2464,11 @@ module.exports = (() => {
                         });
                     } else {
                         // Для остальных наказаний - копируем информацию в буфер
-                        messageContent = this.settings.messageFormats.withText
-                            .replace("{userId}", user.id)
-                            .replace("{ruleId}", ruleId)
-                            .replace("{punishment}", punishment);
+                        messageContent = this.formatTemplate(this.settings.messageFormats.withText, {
+                            userId: user.id,
+                            ruleId,
+                            punishment
+                        });
 
                         this.queueActionWithPreview(
                             "Подтверждение действия",
