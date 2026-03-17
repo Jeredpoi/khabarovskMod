@@ -758,11 +758,17 @@ module.exports = (() => {
                 }
             }
 
-            deleteHistoryEntry(index) {
+            deleteHistoryEntry(entry) {
                 try {
                     const key = "punishmentHistory";
                     const history = BdApi.Data.load(config.info.name, key) || [];
-                    if (index >= 0 && index < history.length) {
+                    const index = history.findIndex(h =>
+                        h.dateIssued === entry.dateIssued &&
+                        h.timeIssued === entry.timeIssued &&
+                        h.userId === entry.userId &&
+                        h.punishment === entry.punishment
+                    );
+                    if (index !== -1) {
                         history.splice(index, 1);
                         BdApi.Data.save(config.info.name, key, history);
                     }
@@ -920,7 +926,7 @@ module.exports = (() => {
                         React.createElement("div", { style: { color: "#B9BBBE", flex: "1" } }, line),
                         React.createElement("button", {
                             onClick: () => {
-                                this.deleteHistoryEntry(idx);
+                                this.deleteHistoryEntry(h);
                                 this.showHistoryModal();
                             },
                             style: {
@@ -1893,7 +1899,10 @@ module.exports = (() => {
                 );
                 advancedSection.content.appendChild(showPreviewToggle.container);
 
-                // Автосохранение: всегда вешаем листенеры, но проверяем тогл в момент события
+                // Автосохранение: AbortController позволяет снять все листенеры при замене панели
+                const autoSaveAbort = new AbortController();
+                panel._autoSaveAbort = autoSaveAbort;
+
                 const allInputs = [
                     withTextField.input, onlyMentionField.input,
                     warnField.input, muteField.input, banField.input, permbanField.input,
@@ -1907,7 +1916,7 @@ module.exports = (() => {
                         if (autoSaveToggle.toggle.getValue()) {
                             saveButton.onclick();
                         }
-                    });
+                    }, { signal: autoSaveAbort.signal });
                 });
 
                 panel.appendChild(advancedSection.wrapper);
@@ -2315,6 +2324,8 @@ module.exports = (() => {
                                 } catch (e) {
                                     console.error("Ошибка удаления конфига:", e);
                                 }
+                                // Снимаем листенеры автосохранения со старой панели
+                                panel._autoSaveAbort?.abort();
                                 this.settings = this.loadSettings();
                                 const newPanel = this.getSettingsPanel();
                                 panel.parentNode.replaceChild(newPanel, panel);
