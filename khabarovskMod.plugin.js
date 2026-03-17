@@ -1,7 +1,7 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 1.2.1
+ * @version 1.2.2
  * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://raw.githubusercontent.com/Jeredpoi/khabarovskMod/main/khabarovskMod.plugin.js
@@ -12,7 +12,7 @@ module.exports = (() => {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-                version: "1.2.1",
+                version: "1.2.2",
             description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
         },
         changelog: [
@@ -94,8 +94,6 @@ module.exports = (() => {
                 this.ChannelStore = null;
                 this._ruleOptionsCache = null;
                 this._ruleOptionsHash = null;
-                this._formTemplateCache = null;
-                this._formTemplateRaw = null;
                 this.configPath = path.join(BdApi.Plugins.folder, "khabarovskMod.config.json");
                 this.settings = this.loadSettings();
                 this.defaultRules = {
@@ -367,9 +365,8 @@ module.exports = (() => {
 
             saveSettings(settings) {
                 try {
-                    // Извлекаем кастомные правила, если они есть
+                    // Извлекаем кастомные правила, если они есть (без мутации исходного объекта)
                     const customRules = settings._customRules || { enabled: false, categories: [] };
-                    delete settings._customRules;
                     const uiSettings = settings.ui || {};
                     const normalizeNumber = (value, fallback, min = null, max = null) => {
                         const num = parseInt(value, 10);
@@ -695,11 +692,6 @@ module.exports = (() => {
                 const template = formConfig.template || "";
                 if (!template) return "";
 
-                if (this._formTemplateRaw !== template) {
-                    this._formTemplateRaw = template;
-                    this._formTemplateCache = template;
-                }
-
                 const now = new Date();
                 let dateIssued = dateIssuedOverride || this.formatDate(now);
 
@@ -737,7 +729,7 @@ module.exports = (() => {
                             ? "Мут"
                             : "Бан";
 
-                const renderedForm = this.formatTemplate(this._formTemplateCache, {
+                const renderedForm = this.formatTemplate(template, {
                     userId: user.id,
                     userTag,
                     ruleId,
@@ -766,11 +758,17 @@ module.exports = (() => {
                 }
             }
 
-            deleteHistoryEntry(index) {
+            deleteHistoryEntry(entry) {
                 try {
                     const key = "punishmentHistory";
                     const history = BdApi.Data.load(config.info.name, key) || [];
-                    if (index >= 0 && index < history.length) {
+                    const index = history.findIndex(h =>
+                        h.dateIssued === entry.dateIssued &&
+                        h.timeIssued === entry.timeIssued &&
+                        h.userId === entry.userId &&
+                        h.punishment === entry.punishment
+                    );
+                    if (index !== -1) {
                         history.splice(index, 1);
                         BdApi.Data.save(config.info.name, key, history);
                     }
@@ -913,12 +911,10 @@ module.exports = (() => {
 
             showHistoryModal() {
                 const history = BdApi.Data.load(config.info.name, "punishmentHistory") || [];
-                if (!history.length) {
-                    this.showToast("История пуста", "info");
-                    return;
-                }
                 const React = BdApi.React;
-                const items = history.map((h, idx) => {
+                const items = !history.length
+                    ? [React.createElement("div", { key: "empty", style: { color: "#B9BBBE" } }, "История пуста")]
+                    : history.map((h, idx) => {
                     const timePart = h.timeIssued ? ` ${h.timeIssued}` : "";
                     const line = `${idx + 1}) ${h.dateIssued}${timePart} | ${h.punishment} | ${h.userId} | ${h.ruleId || "____"}`;
                     return React.createElement(
@@ -930,7 +926,7 @@ module.exports = (() => {
                         React.createElement("div", { style: { color: "#B9BBBE", flex: "1" } }, line),
                         React.createElement("button", {
                             onClick: () => {
-                                this.deleteHistoryEntry(idx);
+                                this.deleteHistoryEntry(h);
                                 this.showHistoryModal();
                             },
                             style: {
@@ -1903,24 +1899,25 @@ module.exports = (() => {
                 );
                 advancedSection.content.appendChild(showPreviewToggle.container);
 
-                // Если автосохранение включено, добавляем обработчики
-                if (this.settings.autoSave) {
-                    const allInputs = [
-                        withTextField.input, onlyMentionField.input,
-                        warnField.input, muteField.input, banField.input, permbanField.input,
-                        userField.input, punishField.input, clearOneField.input, clearMemberField.input,
-                        withTextField2.input, withTextAndCopyField.input, withCopyField.input,
-                        moderatorNickField.input, formTemplateField.input
-                    ];
+                // Автосохранение: AbortController позволяет снять все листенеры при замене панели
+                const autoSaveAbort = new AbortController();
+                panel._autoSaveAbort = autoSaveAbort;
 
-                    allInputs.forEach(input => {
-                        input.addEventListener('change', () => {
-                            if (autoSaveToggle.toggle.getValue()) {
-                                saveButton.onclick();
-                            }
-                        });
-                    });
-                }
+                const allInputs = [
+                    withTextField.input, onlyMentionField.input,
+                    warnField.input, muteField.input, banField.input, permbanField.input,
+                    userField.input, punishField.input, clearOneField.input, clearMemberField.input,
+                    withTextField2.input, withTextAndCopyField.input, withCopyField.input,
+                    moderatorNickField.input, formTemplateField.input
+                ];
+
+                allInputs.forEach(input => {
+                    input.addEventListener('change', () => {
+                        if (autoSaveToggle.toggle.getValue()) {
+                            saveButton.onclick();
+                        }
+                    }, { signal: autoSaveAbort.signal });
+                });
 
                 panel.appendChild(advancedSection.wrapper);
 
@@ -2312,13 +2309,30 @@ module.exports = (() => {
                 resetButton.onmouseleave = () => resetButton.style.background = "#4E5058";
 
                 resetButton.onclick = () => {
-                    if (confirm("Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?")) {
-                        this.settings = this.loadSettings();
-                        // Перезагружаем панель
-                        const newPanel = this.getSettingsPanel();
-                        panel.parentNode.replaceChild(newPanel, panel);
-                        this.showToast("⚙️ Настройки сброшены к умолчаниям", "info");
-                    }
+                    BdApi.UI.showConfirmationModal(
+                        "Сброс настроек",
+                        "Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?",
+                        {
+                            confirmText: "Сбросить",
+                            cancelText: "Отмена",
+                            onConfirm: () => {
+                                // Удаляем файл конфига чтобы loadSettings() вернул чистые дефолты
+                                try {
+                                    if (fs.existsSync(this.configPath)) {
+                                        fs.unlinkSync(this.configPath);
+                                    }
+                                } catch (e) {
+                                    console.error("Ошибка удаления конфига:", e);
+                                }
+                                // Снимаем листенеры автосохранения со старой панели
+                                panel._autoSaveAbort?.abort();
+                                this.settings = this.loadSettings();
+                                const newPanel = this.getSettingsPanel();
+                                panel.parentNode.replaceChild(newPanel, panel);
+                                this.showToast("⚙️ Настройки сброшены к умолчаниям", "info");
+                            }
+                        }
+                    );
                 };
 
                 const openButton = document.createElement("button");
@@ -2475,34 +2489,36 @@ module.exports = (() => {
                             dateEnd: dateIssued
                         });
                     } else if (this.settings.punishmentsWithCopy.includes(punishment)) {
-                        // Проверяем наличие команд перед использованием
-                        if (punishment === "Мут 90 минут") {
-                            if (!this.settings.messageFormats?.commands?.mute) {
-                                this.showToast("Формат команды /mute не найден в настройках", "error");
-                                return;
-                            }
-                            commandContent = this.formatTemplate(this.settings.messageFormats.commands.mute, {
+                        // Определяем команду по ключевым словам в названии наказания
+                        const punishmentLower = punishment.toLowerCase();
+                        const commands = this.settings.messageFormats?.commands || {};
+                        let commandKey = null;
+
+                        if (punishmentLower.includes("мут") || punishmentLower.includes("mute")) {
+                            commandKey = "mute";
+                        } else if (
+                            punishmentLower.includes("перманент") ||
+                            punishmentLower.includes("permban") ||
+                            punishmentLower.includes("permanent")
+                        ) {
+                            commandKey = "permban";
+                        } else if (punishmentLower.includes("бан") || punishmentLower.includes("ban")) {
+                            commandKey = "ban";
+                        }
+
+                        if (commandKey && commands[commandKey]) {
+                            commandContent = this.formatTemplate(commands[commandKey], {
                                 userId: user.id,
                                 ruleId
                             });
-                        } else if (punishment === "Бан 7-15 дней") {
-                            if (!this.settings.messageFormats?.commands?.ban) {
-                                this.showToast("Формат команды /ban не найден в настройках", "error");
-                                return;
-                            }
-                            commandContent = this.formatTemplate(this.settings.messageFormats.commands.ban, {
-                                userId: user.id,
-                                ruleId
-                            });
-                        } else if (punishment === "Перманентная блокировка") {
-                            if (!this.settings.messageFormats?.commands?.permban) {
-                                this.showToast("Формат команды /permban не найден в настройках", "error");
-                                return;
-                            }
-                            commandContent = this.formatTemplate(this.settings.messageFormats.commands.permban, {
-                                userId: user.id,
-                                ruleId
-                            });
+                        } else if (!commandKey) {
+                            // Неизвестный тип — пытаемся использовать onlyMention как fallback
+                            commandContent = this.formatTemplate(
+                                this.settings.messageFormats?.onlyMention || "<@{userId}>",
+                                { userId: user.id, ruleId }
+                            );
+                        } else {
+                            this.showToast(`Формат команды для "${punishment}" не найден в настройках`, "error");
                         }
 
                         if (commandContent) {
@@ -2552,9 +2568,13 @@ module.exports = (() => {
             }
 
             showToast(message, type = "info") {
-                if (this.settings.showNotifications !== false) {
-                    BdApi.UI.showToast(message, {type: type});
-                }
+                if (this.settings.showNotifications === false) return;
+                const ns = this.settings.notificationSettings || {};
+                if (type === "success" && ns.showSuccess === false) return;
+                if (type === "error" && ns.showError === false) return;
+                if (type === "info" && ns.showInfo === false) return;
+                const timeout = ns.timeout || 3000;
+                BdApi.UI.showToast(message, { type, timeout });
             }
 
             queueActionWithPreview(title, previewText, action) {
