@@ -16,7 +16,6 @@
 ## Установка
 
 1. Убедитесь, что у вас установлен [BetterDiscord](https://betterdiscord.app/)
-2. Убедитесь, что установлена библиотека [ZeresPluginLibrary](https://github.com/rauenzi/BDPluginLibrary)
 3. Скопируйте файл `khabarovskMod.plugin.js` в папку `%AppData%\BetterDiscord\plugins\`
 4. Перезапустите Discord
 5. Активируйте плагин в настройках BetterDiscord
