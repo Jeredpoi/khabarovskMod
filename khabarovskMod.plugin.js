@@ -1,99 +1,66 @@
 /**
  * @name khabarovskMod
  * @author Jeredpoi(Максим Паль!?)
- * @version 1.2.2
- * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Добавлены инструменты модерации: /user и /punish
+ * @version 1.6.0
+ * @description Плагин модерации для сервера Хабаровск (проект BlackRussia) через контекстное меню пользователя. Поддерживает правила с пунктов 2.1-2.21, 3.1-3.5, 4.1-4.4. Инструменты модерации: /user и /punish. Работает на BetterDiscord 1.14+ без внешних библиотек.
  * @website https://github.com/Jeredpoi/khabarovskMod
  * @source https://raw.githubusercontent.com/Jeredpoi/khabarovskMod/main/khabarovskMod.plugin.js
  */
+
+const PLUGIN_NAME = "khabarovskMod";
 
 module.exports = (() => {
     const config = {
         info: {
             name: "khabarovskMod",
             authors: [{ name: "Jeredpoi(Максим Паль!?)" }],
-                version: "1.2.2",
-            description: "Плагин модерации для khabarovskMod. Добавлены инструменты модерации: /user и /punish"
+            version: "1.6.0",
+            description: "Плагин модерации для khabarovskMod. Инструменты модерации: /user и /punish"
         },
         changelog: [
-                {
-                    title: "Новые функции",
-                    type: "added",
-                    items: [
-                        "Добавлен блок «Недавние наказания» в инструменты модерации для быстрого повторного применения по текущему пользователю"
-                    ]
-                },
-                {
-                    title: "Улучшения",
-                    type: "improved",
-                    items: [
-                        "Добавлен единый шаблонизатор переменных для команд, сообщений и форм (меньше дублирования кода)",
-                        "Оптимизирована генерация команд в инструментах модерации и выдаче наказаний"
-                    ]
-                },
-                {
-                    title: "Новые инструменты",
-                    type: "added",
-                    items: [
-                        "В меню модерации добавлены быстрые действия: копировать ID пользователя и упоминание"
-                    ]
-                },
             {
-                title: "Новые функции",
+                title: "BetterDiscord 1.14",
                 type: "added",
                 items: [
-                    "Расширены настройки интерфейса в конфиге (ширина панели, шрифты, отступы, скругления, акцентный цвет, скорость анимаций)",
-                    "Панель настроек использует новые UI-параметры (размеры, паддинги, анимации, цвета)",
-                    "Параметр showIcons управляет иконками в меню и заголовках секций"
+                    "ZeresPluginLibrary больше не нужна — плагин работает на нативном BdApi. Окно «установите библиотеку» удалено",
+                    "Ошибки пишутся через BdApi.Logger с именем плагина вместо console.error"
                 ]
             },
             {
                 title: "Исправления",
                 type: "fixed",
                 items: [
-                    "Для устного предупреждения и предупреждения скрыта дата снятия, дата выдачи ставится автоматически"
+                    "Время мута или бана, равное 0, больше не подменяется значением по умолчанию",
+                    "Категория правил без списка rules больше не роняет меню модерации",
+                    "Ошибки снятия патчей контекстного меню больше не проглатываются молча"
+                ]
+            },
+            {
+                title: "Производительность",
+                type: "improved",
+                items: [
+                    "SelectedChannelStore ищется один раз за сессию, а не при каждой выдаче наказания",
+                    "Список правил больше не сериализуется через JSON.stringify при каждом открытии меню"
                 ]
             }
         ]
     };
 
-    return !global.ZeresPluginLibrary ? class {
-        constructor() { this._config = config; }
-        getName() { return config.info.name; }
-        getAuthor() { return config.info.authors.map(a => a.name).join(", "); }
-        getVersion() { return config.info.version; }
-
-        load() {
-            BdApi.UI.showConfirmationModal("Библиотека отсутствует",
-                `Для работы ${config.info.name} требуется ZeresPluginLibrary. Установить?`, {
-                    confirmText: "Установить",
-                    cancelText: "Отмена",
-                    onConfirm: () => {
-                        require("request").get("https://rauenzi.github.io/BDPluginLibrary/release/0PluginLibrary.plugin.js",
-                            (error, response, body) => {
-                                if (error) return BdApi.UI.showToast("Ошибка загрузки", {type: "error"});
-                                require("fs").writeFile(require("path").join(BdApi.Plugins.folder, "0PluginLibrary.plugin.js"),
-                                    body, () => BdApi.UI.showToast("Библиотека установлена, перезапустите Discord", {type: "success"}));
-                            });
-                    }
-                });
-        }
-        start() { this.load(); }
-        stop() {}
-    } : (([Plugin, Api]) => {
-        const { DiscordModules, WebpackModules, Patcher } = Api;
+    // BetterDiscord 1.14+ предоставляет всё нужное нативно (BdApi.UI, ContextMenu,
+    // Webpack, Data, Logger), поэтому ZeresPluginLibrary больше не требуется.
+    return (() => {
         const fs = require("fs");
         const path = require("path");
+        const Logger = BdApi.Logger;
 
-        return class khabarovskMod extends Plugin {
+        return class khabarovskMod {
             constructor() {
-                super();
                 this.contextMenuPatch = null;
                 this.messageMenuPatches = [];
                 this.MessageActions = null;
                 this.ChannelStore = null;
+                this.SelectedChannelStore = null;
                 this._ruleOptionsCache = null;
-                this._ruleOptionsHash = null;
                 this.configPath = path.join(BdApi.Plugins.folder, "khabarovskMod.config.json");
                 this.settings = this.loadSettings();
                 this.defaultRules = {
@@ -160,7 +127,7 @@ module.exports = (() => {
                             if (category.id && category.name && category.rules) {
                                 // Преобразуем формат из конфига в формат плагина
                                 const categoryRules = {};
-                                Object.keys(category.rules).forEach(ruleId => {
+                                Object.keys(category.rules || {}).forEach(ruleId => {
                                     const rule = category.rules[ruleId];
                                     categoryRules[ruleId] = {
                                         text: rule.text || ruleId,
@@ -178,12 +145,11 @@ module.exports = (() => {
                         });
                     }
                 } catch (error) {
-                    console.error("Ошибка загрузки кастомных правил:", error);
+                    Logger.error(PLUGIN_NAME, "Ошибка загрузки кастомных правил:", error);
                 }
 
                 // Сброс кэша правил при изменении
                 this._ruleOptionsCache = null;
-                this._ruleOptionsHash = null;
                 return rules;
             }
 
@@ -355,7 +321,7 @@ module.exports = (() => {
                         };
                     }
                 } catch (error) {
-                    console.error("Ошибка загрузки настроек:", error);
+                    Logger.error(PLUGIN_NAME, "Ошибка загрузки настроек:", error);
                 }
 
                 // Если файла нет или ошибка - создаем и возвращаем дефолтные
@@ -474,11 +440,11 @@ module.exports = (() => {
                     // Сохраняем с красивым форматированием (4 пробела для отступов)
                     fs.writeFileSync(this.configPath, JSON.stringify(configWithSections, null, 4), "utf8");
                 } catch (error) {
-                    console.error("Ошибка сохранения настроек:", error);
+                    Logger.error(PLUGIN_NAME, "Ошибка сохранения настроек:", error);
                 }
             }
 
-            onStart() {
+            start() {
                 try {
                     this.showChangelogIfNeeded();
                     this.MessageActions = BdApi.Webpack.getModule(m => m?.sendMessage && m?.receiveMessage);
@@ -486,12 +452,12 @@ module.exports = (() => {
 
                     if (!this.MessageActions) {
                         this.showToast("Ошибка: MessageActions не найден", "error");
-                        console.error("MessageActions module not found");
+                        Logger.error(PLUGIN_NAME, "MessageActions module not found");
                     }
 
                     if (!this.ChannelStore) {
                         this.showToast("Ошибка: ChannelStore не найден", "error");
-                        console.error("ChannelStore module not found");
+                        Logger.error(PLUGIN_NAME, "ChannelStore module not found");
                     }
 
                     if (this.contextMenuPatch) {
@@ -500,7 +466,7 @@ module.exports = (() => {
                     }
                     if (this.messageMenuPatches && this.messageMenuPatches.length) {
                         this.messageMenuPatches.forEach(unpatch => {
-                            try { unpatch(); } catch (e) {}
+                            try { unpatch(); } catch (e) { Logger.error(PLUGIN_NAME, "unpatch failed", e); }
                         });
                         this.messageMenuPatches = [];
                     }
@@ -530,7 +496,7 @@ module.exports = (() => {
 
                             children.push(moderationMenuItem);
                         } catch (error) {
-                            console.error("khabarovskMod patch error:", error);
+                            Logger.error(PLUGIN_NAME, "khabarovskMod patch error:", error);
                         }
                     });
 
@@ -560,7 +526,7 @@ module.exports = (() => {
 
                             children.push(moderationMenuItem);
                         } catch (error) {
-                            console.error("khabarovskMod message patch error:", error);
+                            Logger.error(PLUGIN_NAME, "khabarovskMod message patch error:", error);
                         }
                     });
                     this.messageMenuPatches.push(messagePatch);
@@ -591,26 +557,26 @@ module.exports = (() => {
 
                             children.push(moderationMenuItem);
                         } catch (error) {
-                            console.error("khabarovskMod message-context patch error:", error);
+                            Logger.error(PLUGIN_NAME, "khabarovskMod message-context patch error:", error);
                         }
                     });
                     this.messageMenuPatches.push(messageContextPatch);
 
                     this.showToast("khabarovskMod запущен", "success");
                 } catch (error) {
-                    console.error("khabarovskMod start error:", error);
+                    Logger.error(PLUGIN_NAME, "khabarovskMod start error:", error);
                     this.showToast(`Ошибка запуска: ${error.message}`, "error");
                 }
             }
 
-            onStop() {
+            stop() {
                 if (this.contextMenuPatch) {
                     this.contextMenuPatch();
                     this.contextMenuPatch = null;
                 }
                 if (this.messageMenuPatches && this.messageMenuPatches.length) {
                     this.messageMenuPatches.forEach(unpatch => {
-                        try { unpatch(); } catch (e) {}
+                        try { unpatch(); } catch (e) { Logger.error(PLUGIN_NAME, "unpatch failed", e); }
                     });
                     this.messageMenuPatches = [];
                 }
@@ -697,11 +663,11 @@ module.exports = (() => {
 
                 let dateEnd = "";
                 if (typeKey === "mute") {
-                    const minutes = parseInt(this.settings?.commandSettings?.defaultMuteTime || 90, 10);
+                    const minutes = parseInt(this.settings?.commandSettings?.defaultMuteTime ?? 90, 10);
                     const end = new Date(now.getTime() + minutes * 60 * 1000);
                     dateEnd = this.formatDate(end);
                 } else if (typeKey === "ban") {
-                    const days = parseInt(this.settings?.commandSettings?.defaultBanTime || 7, 10);
+                    const days = parseInt(this.settings?.commandSettings?.defaultBanTime ?? 7, 10);
                     const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
                     dateEnd = this.formatDate(end);
                 } else {
@@ -754,7 +720,7 @@ module.exports = (() => {
                     const trimmed = history.slice(-max);
                     BdApi.Data.save(config.info.name, key, trimmed);
                 } catch (e) {
-                    console.error("Ошибка сохранения истории:", e);
+                    Logger.error(PLUGIN_NAME, "Ошибка сохранения истории:", e);
                 }
             }
 
@@ -773,7 +739,7 @@ module.exports = (() => {
                         BdApi.Data.save(config.info.name, key, history);
                     }
                 } catch (e) {
-                    console.error("Ошибка удаления истории:", e);
+                    Logger.error(PLUGIN_NAME, "Ошибка удаления истории:", e);
                 }
             }
 
@@ -905,7 +871,7 @@ module.exports = (() => {
                     a.click();
                     setTimeout(() => URL.revokeObjectURL(url), 1000);
                 } catch (e) {
-                    console.error("Ошибка сохранения файла:", e);
+                    Logger.error(PLUGIN_NAME, "Ошибка сохранения файла:", e);
                 }
             }
 
@@ -1032,10 +998,9 @@ module.exports = (() => {
 
             getRuleOptions() {
                 const rules = this.rules || {};
-                const hash = JSON.stringify(rules);
-                if (this._ruleOptionsCache && this._ruleOptionsHash === hash) {
-                    return this._ruleOptionsCache;
-                }
+                // Кеш сбрасывается в loadCustomRules(), поэтому пересериализовывать
+                // все правила на каждый вызов не нужно.
+                if (this._ruleOptionsCache) return this._ruleOptionsCache;
                 const options = [];
                 Object.keys(rules).forEach(categoryKey => {
                     const category = rules[categoryKey];
@@ -1048,7 +1013,6 @@ module.exports = (() => {
                     });
                 });
                 this._ruleOptionsCache = options;
-                this._ruleOptionsHash = hash;
                 return options;
             }
 
@@ -1069,10 +1033,10 @@ module.exports = (() => {
                 let defaultEndISO = defaultIssuedISO;
                 const includeDates = typeKey === "mute" || typeKey === "ban";
                 if (typeKey === "mute") {
-                    const minutes = parseInt(this.settings?.commandSettings?.defaultMuteTime || 90, 10);
+                    const minutes = parseInt(this.settings?.commandSettings?.defaultMuteTime ?? 90, 10);
                     defaultEndISO = this.formatDateISO(new Date(now.getTime() + minutes * 60 * 1000));
                 } else if (typeKey === "ban") {
-                    const days = parseInt(this.settings?.commandSettings?.defaultBanTime || 7, 10);
+                    const days = parseInt(this.settings?.commandSettings?.defaultBanTime ?? 7, 10);
                     defaultEndISO = this.formatDateISO(new Date(now.getTime() + days * 24 * 60 * 60 * 1000));
                 }
                 const select = React.createElement(
@@ -1205,7 +1169,7 @@ module.exports = (() => {
                 });
                 const categoryItems = Object.keys(this.rules).map(categoryKey => {
                     const category = this.rules[categoryKey];
-                    const ruleItems = Object.keys(category.rules).map(ruleId => {
+                    const ruleItems = Object.keys(category.rules || {}).map(ruleId => {
                         const rule = category.rules[ruleId];
                         const punishmentItems = rule.punishments.map((punishment, idx) => ({
                             type: "item",
@@ -1926,7 +1890,7 @@ module.exports = (() => {
 
                 const defaultMuteTimeField = createInputField(
                     "Время мута по умолчанию (минуты):",
-                    this.settings.commandSettings?.defaultMuteTime || 90,
+                    this.settings.commandSettings?.defaultMuteTime ?? 90,
                     "Время мута в минутах, используемое по умолчанию"
                 );
                 defaultMuteTimeField.input.type = "number";
@@ -1935,7 +1899,7 @@ module.exports = (() => {
 
                 const defaultBanTimeField = createInputField(
                     "Время бана по умолчанию (дни):",
-                    this.settings.commandSettings?.defaultBanTime || 7,
+                    this.settings.commandSettings?.defaultBanTime ?? 7,
                     "Время бана в днях, используемое по умолчанию"
                 );
                 defaultBanTimeField.input.type = "number";
@@ -2289,7 +2253,7 @@ module.exports = (() => {
                         this.saveSettings(this.settings);
                         this.showToast("✅ Настройки успешно сохранены!", "success");
                     } catch (error) {
-                        console.error("Ошибка сохранения настроек:", error);
+                        Logger.error(PLUGIN_NAME, "Ошибка сохранения настроек:", error);
                         this.showToast("❌ Ошибка сохранения: " + error.message, "error");
                     }
                 };
@@ -2322,7 +2286,7 @@ module.exports = (() => {
                                         fs.unlinkSync(this.configPath);
                                     }
                                 } catch (e) {
-                                    console.error("Ошибка удаления конфига:", e);
+                                    Logger.error(PLUGIN_NAME, "Ошибка удаления конфига:", e);
                                 }
                                 // Снимаем листенеры автосохранения со старой панели
                                 panel._autoSaveAbort?.abort();
@@ -2354,7 +2318,7 @@ module.exports = (() => {
                         require("electron").shell.openPath(this.configPath);
                         this.showToast("📂 Открываю конфиг-файл...", "info");
                     } catch (error) {
-                        console.error("Ошибка открытия файла:", error);
+                        Logger.error(PLUGIN_NAME, "Ошибка открытия файла:", error);
                         this.showToast("❌ Ошибка открытия файла: " + error.message, "error");
                     }
                 };
@@ -2368,7 +2332,11 @@ module.exports = (() => {
             }
 
             getCurrentChannelId() {
-                const SelectedChannelStore = BdApi.Webpack.getModule(m => m?.getChannelId && m?.getLastSelectedChannelId);
+                // Стор ищется один раз за сессию: Webpack-поиск дорогой.
+                if (!this.SelectedChannelStore) {
+                    this.SelectedChannelStore = BdApi.Webpack.getModule(m => m?.getChannelId && m?.getLastSelectedChannelId);
+                }
+                const SelectedChannelStore = this.SelectedChannelStore;
                 if (!SelectedChannelStore) {
                     this.showToast("SelectedChannelStore не найден", "error");
                     return null;
@@ -2562,7 +2530,7 @@ module.exports = (() => {
                     }
 
                 } catch (error) {
-                    console.error("khabarovskMod executePunishment error:", error);
+                    Logger.error(PLUGIN_NAME, "khabarovskMod executePunishment error:", error);
                     this.showToast(`Ошибка: ${error.message}`, "error");
                 }
             }
@@ -2611,7 +2579,7 @@ module.exports = (() => {
                         BdApi.Data.save(config.info.name, "lastVersion", config.info.version);
                     }
                 } catch (error) {
-                    console.error("Ошибка показа changelog:", error);
+                    Logger.error(PLUGIN_NAME, "Ошибка показа changelog:", error);
                 }
             }
 
@@ -2621,7 +2589,7 @@ module.exports = (() => {
                     navigator.clipboard.writeText(text).then(() => {
                         this.showToast(`Скопировано в буфер: "${text}". Нажмите Ctrl+V в чате.`, "info");
                     }).catch(err => {
-                        console.error("Ошибка копирования:", err);
+                        Logger.error(PLUGIN_NAME, "Ошибка копирования:", err);
 
                         // Запасной метод - старый API буфера обмена
                         const textArea = document.createElement("textarea");
@@ -2645,10 +2613,10 @@ module.exports = (() => {
                     });
 
                 } catch (error) {
-                    console.error("Ошибка вставки текста:", error);
+                    Logger.error(PLUGIN_NAME, "Ошибка вставки текста:", error);
                     this.showToast(`Ошибка: ${error.message}`, "error");
                 }
             }
         };
-    })(global.ZeresPluginLibrary.buildPlugin(config));
+    })();
 })();
