@@ -210,7 +210,6 @@ module.exports = (() => {
                     ui: {
                         theme: "dark",
                         compactMode: false,
-                        showIcons: true,
                         animationSpeed: "normal",
                         panelMaxWidth: 800,
                         baseFontSize: 14,
@@ -431,7 +430,6 @@ module.exports = (() => {
                             ui: {
                                 theme: uiSettings.theme || "dark",
                                 compactMode: uiSettings.compactMode === true,
-                                showIcons: uiSettings.showIcons !== false,
                                 animationSpeed: normalizeAnimationSpeed(uiSettings.animationSpeed),
                                 panelMaxWidth: normalizeNumber(uiSettings.panelMaxWidth, 800, 420, 1400),
                                 baseFontSize: normalizeNumber(uiSettings.baseFontSize, 14, 11, 20),
@@ -1328,8 +1326,6 @@ module.exports = (() => {
             }
 
             buildModerationMenuItems(user, messageId) {
-                const showIcons = this.settings.ui?.showIcons !== false;
-                const withIcon = (icon, text) => showIcons ? `${icon} ${text}` : text;
                 const recentPunishmentsLimit = this.settings?.advanced?.recentPunishmentsLimit || 7;
                 const buildForUser = (template, extra = {}) => this.formatTemplate(template, {
                     userId: user.id,
@@ -1367,7 +1363,7 @@ module.exports = (() => {
                 const toolsItems = [
                     {
                         type: "item",
-                        label: withIcon("🔍", "Проверка пользователя"),
+                        label: "Проверка пользователя",
                         id: "khabarovsk-tool-user",
                         action: () => {
                             if (!this.settings.messageFormats?.commands?.user) {
@@ -1384,7 +1380,7 @@ module.exports = (() => {
                     },
                     {
                         type: "item",
-                        label: withIcon("⚖️", "Punish"),
+                        label: "Punish",
                         id: "khabarovsk-tool-punish",
                         action: () => {
                             if (!this.settings.messageFormats?.commands?.punish) {
@@ -1401,13 +1397,13 @@ module.exports = (() => {
                     },
                     {
                         type: "item",
-                        label: withIcon("🆔", "Копировать ID"),
+                        label: "Копировать ID",
                         id: "khabarovsk-tool-copy-id",
                         action: () => this.insertTextIntoChat(String(user.id))
                     },
                     {
                         type: "item",
-                        label: withIcon("👤", "Копировать упоминание"),
+                        label: "Копировать упоминание",
                         id: "khabarovsk-tool-copy-mention",
                         action: () => this.insertTextIntoChat(`<@${user.id}>`)
                     }
@@ -1451,7 +1447,7 @@ module.exports = (() => {
                 if (formsItems.length) {
                     toolsItems.push({
                         type: "submenu",
-                        label: withIcon("📝", "Формы наказаний"),
+                        label: "Формы наказаний",
                         id: "khabarovsk-punishment-forms",
                         items: formsItems
                     });
@@ -1472,7 +1468,7 @@ module.exports = (() => {
 
                     toolsItems.push({
                         type: "submenu",
-                        label: withIcon("🕘", "Недавние наказания"),
+                        label: "Недавние наказания",
                         id: "khabarovsk-recent-punishments",
                         items: recentItems
                     });
@@ -1480,7 +1476,7 @@ module.exports = (() => {
 
                 toolsItems.push({
                     type: "item",
-                    label: withIcon("📜", "История наказаний"),
+                    label: "История наказаний",
                     id: "khabarovsk-history",
                     action: () => this.showHistoryModal()
                 });
@@ -1489,7 +1485,7 @@ module.exports = (() => {
                 if (messageId) {
                     cleanupItems.push({
                         type: "item",
-                        label: withIcon("🧹", "Очистить сообщение"),
+                        label: "Очистить сообщение",
                         id: "khabarovsk-clear-one",
                         action: () => {
                             const clearOne = this.settings.messageFormats?.commands?.clearOne || this.settings.messageFormats?.commands?.clear1;
@@ -1508,7 +1504,7 @@ module.exports = (() => {
                 }
                 cleanupItems.push({
                     type: "item",
-                    label: withIcon("🧹", "Очистить сообщения пользователя"),
+                    label: "Очистить сообщения пользователя",
                     id: "khabarovsk-clear-member",
                     action: () => {
                         if (!this.settings.messageFormats?.commands?.clearMember) {
@@ -1527,7 +1523,7 @@ module.exports = (() => {
                 if (cleanupItems.length) {
                     toolsItems.push({
                         type: "submenu",
-                        label: withIcon("🧹", "Очистка"),
+                        label: "Очистка",
                         id: "khabarovsk-tool-cleanup",
                         items: cleanupItems
                     });
@@ -1535,7 +1531,7 @@ module.exports = (() => {
 
                 const toolsMenuItem = {
                     type: "submenu",
-                    label: withIcon("🔧", "Инструменты модерации"),
+                    label: "Инструменты модерации",
                     id: "khabarovsk-moderation-tools",
                     items: toolsItems
                 };
@@ -1552,7 +1548,6 @@ module.exports = (() => {
                 const uiDefaults = {
                     theme: "dark",
                     compactMode: false,
-                    showIcons: true,
                     animationSpeed: "normal",
                     panelMaxWidth: 800,
                     baseFontSize: 14,
@@ -1592,7 +1587,6 @@ module.exports = (() => {
                     return (v === "fast" || v === "normal" || v === "slow") ? v : "normal";
                 };
                 const compactMode = uiRaw.compactMode === true;
-                const showIcons = uiRaw.showIcons !== false;
                 const panelMaxWidth = normalizeNumber(uiRaw.panelMaxWidth, uiDefaults.panelMaxWidth, 420, 1400);
                 const baseFontSize = normalizeNumber(uiRaw.baseFontSize, uiDefaults.baseFontSize, 11, 20);
                 const sectionSpacing = compactMode
@@ -1621,7 +1615,6 @@ module.exports = (() => {
                 const sectionTitleFontSize = baseFontSize + 2;
                 const inputPadding = `${inputPaddingY}px ${inputPaddingX}px`;
                 const sectionPaddingCss = `${sectionPadding}px ${sectionPadding + 5}px`;
-                const withIcon = (icon, text) => (showIcons && icon) ? `${icon} ${text}` : text;
                 const accentHoverColor = accentColor === "#5865F2" ? "#4752C4" : accentColor;
 
                 const panel = document.createElement("div");
@@ -1633,7 +1626,7 @@ module.exports = (() => {
 
                 // Заголовок
                 const title = document.createElement("h2");
-                title.textContent = withIcon("⚙️", "Настройки khabarovskMod");
+                title.textContent = "Настройки khabarovskMod";
                 title.style.marginBottom = `${sectionSpacing + 10}px`;
                 title.style.color = textColor;
                 title.style.fontSize = `${baseFontSize + 10}px`;
@@ -1641,7 +1634,7 @@ module.exports = (() => {
                 panel.appendChild(title);
 
                 // Функция создания раскрывающейся секции (accordion)
-                const createCollapsibleSection = (titleText, icon = "📋", defaultOpen = false) => {
+                const createCollapsibleSection = (titleText, defaultOpen = false) => {
                     const sectionWrapper = document.createElement("div");
                     sectionWrapper.style.marginBottom = `${sectionSpacing}px`;
                     sectionWrapper.style.backgroundColor = sectionBackground;
@@ -1658,15 +1651,14 @@ module.exports = (() => {
                     sectionHeader.style.justifyContent = "space-between";
                     sectionHeader.style.userSelect = "none";
                     sectionHeader.style.transition = `background ${animationMs}ms`;
-                    sectionHeader.onmouseenter = () => sectionHeader.style.backgroundColor = "rgba(79, 84, 92, 0.5)";
-                    sectionHeader.onmouseleave = () => {
-                        if (!sectionContent.style.display || sectionContent.style.display !== "none") {
-                            sectionHeader.style.backgroundColor = "transparent";
-                        }
-                    };
+                    const headerHover = "rgba(79, 84, 92, 0.5)";
+                    // Раскрытая секция подсвечена постоянно, свёрнутая — только под курсором.
+                    const headerIdleColor = () => sectionContent.style.display === "none" ? "transparent" : headerHover;
+                    sectionHeader.onmouseenter = () => sectionHeader.style.backgroundColor = headerHover;
+                    sectionHeader.onmouseleave = () => sectionHeader.style.backgroundColor = headerIdleColor();
 
                     const sectionTitle = document.createElement("div");
-                    sectionTitle.textContent = withIcon(icon, titleText);
+                    sectionTitle.textContent = titleText;
                     sectionTitle.style.color = textColor;
                     sectionTitle.style.fontSize = `${sectionTitleFontSize}px`;
                     sectionTitle.style.fontWeight = "600";
@@ -1691,7 +1683,8 @@ module.exports = (() => {
                         const isOpen = sectionContent.style.display !== "none";
                         sectionContent.style.display = isOpen ? "none" : "block";
                         arrow.textContent = isOpen ? "▶" : "▼";
-                        sectionHeader.style.backgroundColor = isOpen ? "transparent" : "rgba(79, 84, 92, 0.5)";
+                        // Курсор ещё над заголовком, поэтому оставляем подсветку наведения.
+                        sectionHeader.style.backgroundColor = headerHover;
                     };
 
                     sectionWrapper.appendChild(sectionHeader);
@@ -1716,7 +1709,9 @@ module.exports = (() => {
 
                     const input = document.createElement("input");
                     input.type = "text";
-                    input.value = value || "";
+                    // Ноль — валидное значение (например, скругление углов),
+                    // поэтому || здесь нельзя: он превратил бы 0 в пустое поле.
+                    input.value = (value === undefined || value === null) ? "" : String(value);
                     input.placeholder = placeholder;
                     input.style.width = "100%";
                     input.style.padding = inputPadding;
@@ -1790,7 +1785,7 @@ module.exports = (() => {
                 };
 
                 // Функция создания переключателя (toggle)
-                const createToggle = (labelText, initialValue, hintText) => {
+                const createToggle = (labelText, initialValue, hintText, onChange) => {
                     let currentValue = initialValue;
                     const container = document.createElement("div");
                     container.style.marginBottom = `${sectionSpacing + 10}px`;
@@ -1848,7 +1843,9 @@ module.exports = (() => {
                     toggle.appendChild(toggleCircle);
 
                     const updateToggle = (newValue) => {
+                        const changed = currentValue !== newValue;
                         currentValue = newValue;
+                        if (changed && typeof onChange === "function") onChange(newValue);
                         toggle.style.backgroundColor = newValue ? accentColor : "#4E5058";
                         toggleCircle.style.left = newValue ? `${toggleOnLeft}px` : `${togglePadding}px`;
                     };
@@ -1866,8 +1863,15 @@ module.exports = (() => {
                     return { container, toggle };
                 };
 
+                // Автосохранение. Ссылка на переключатель проставляется ниже — к моменту
+                // события панель уже собрана, поэтому отложенное связывание безопасно.
+                let autoSaveToggleRef = null;
+                const triggerAutoSave = () => {
+                    if (autoSaveToggleRef?.toggle?.getValue()) saveButton.onclick();
+                };
+
                 // Секция: Форматы сообщений (раскрывающаяся)
-                const formatsSection = createCollapsibleSection("Форматы сообщений", "💬", true);
+                const formatsSection = createCollapsibleSection("Форматы сообщений", true);
 
                 const rulesChannelField = createInputField(
                     "ID канала с правилами:",
@@ -1908,12 +1912,13 @@ module.exports = (() => {
                 panel.appendChild(formatsSection.wrapper);
 
                 // Секция: Канал форм наказаний (раскрывающаяся)
-                const approveSection = createCollapsibleSection("Канал форм наказаний", "\u2705", false);
+                const approveSection = createCollapsibleSection("Канал форм наказаний", false);
 
                 const approveEnabledToggle = createToggle(
                     "Копировать команду при «Одобрить»",
                     this.settings.approveCopy?.enabled !== false,
-                    "При нажатии кнопки «Одобрить» команда из сообщения бота копируется в буфер. Само нажатие проходит как обычно."
+                    "При нажатии кнопки «Одобрить» команда из сообщения бота копируется в буфер. Само нажатие проходит как обычно.",
+                    triggerAutoSave
                 );
                 approveSection.content.appendChild(approveEnabledToggle.container);
 
@@ -1935,7 +1940,7 @@ module.exports = (() => {
                 panel.appendChild(approveSection.wrapper);
 
                 // Секция: Форматы команд (раскрывающаяся)
-                const commandsSection = createCollapsibleSection("Форматы команд", "⚡", false);
+                const commandsSection = createCollapsibleSection("Форматы команд", false);
 
                 const warnField = createInputField(
                     "Команда /warn:",
@@ -1996,7 +2001,7 @@ module.exports = (() => {
                 panel.appendChild(commandsSection.wrapper);
 
                 // Секция: Конфигурация форм (раскрывающаяся)
-                const formsSection = createCollapsibleSection("Конфигурация форм", "📝", false);
+                const formsSection = createCollapsibleSection("Конфигурация форм", false);
 
                 const moderatorNickField = createInputField(
                     "Ваш Nick_Name (модератор):",
@@ -2026,7 +2031,7 @@ module.exports = (() => {
                 panel.appendChild(formsSection.wrapper);
 
                 // Секция: Категории наказаний (раскрывающаяся)
-                const punishmentsSection = createCollapsibleSection("Категории наказаний", "⚖️", false);
+                const punishmentsSection = createCollapsibleSection("Категории наказаний", false);
 
                 const withTextField2 = createInputField(
                     "Наказания с автоотправкой (через запятую):",
@@ -2052,12 +2057,13 @@ module.exports = (() => {
                 panel.appendChild(punishmentsSection.wrapper);
 
                 // Секция: Дополнительные настройки (раскрывающаяся)
-                const advancedSection = createCollapsibleSection("Дополнительные настройки", "🔧", false);
+                const advancedSection = createCollapsibleSection("Дополнительные настройки", false);
 
                 const showNotificationsToggle = createToggle(
                     "Показывать уведомления",
                     this.settings.showNotifications !== false,
-                    "Показывать toast-уведомления при выполнении действий"
+                    "Показывать toast-уведомления при выполнении действий",
+                    triggerAutoSave
                 );
                 advancedSection.content.appendChild(showNotificationsToggle.container);
 
@@ -2067,47 +2073,28 @@ module.exports = (() => {
                     "Автоматически сохранять настройки при изменении"
                 );
                 advancedSection.content.appendChild(autoSaveToggle.container);
+                autoSaveToggleRef = autoSaveToggle;
 
                 const confirmActionsToggle = createToggle(
                     "Подтверждение действий",
                     this.settings.advanced?.confirmActions === true,
-                    "Запрашивать подтверждение перед выполнением действий"
+                    "Запрашивать подтверждение перед выполнением действий",
+                    triggerAutoSave
                 );
                 advancedSection.content.appendChild(confirmActionsToggle.container);
 
                 const showPreviewToggle = createToggle(
                     "Показывать превью",
                     this.settings.advanced?.showPreview !== false,
-                    "Показывать превью команды перед выполнением"
+                    "Показывать превью команды перед выполнением",
+                    triggerAutoSave
                 );
                 advancedSection.content.appendChild(showPreviewToggle.container);
-
-                // Автосохранение: AbortController позволяет снять все листенеры при замене панели
-                const autoSaveAbort = new AbortController();
-                panel._autoSaveAbort = autoSaveAbort;
-
-                const allInputs = [
-                    withTextField.input, onlyMentionField.input,
-                    oralWarningField.input, warningField.input, rulesChannelField.input,
-                    approveChannelField.input, approveLabelsField.input,
-                    warnField.input, muteField.input, banField.input, permbanField.input,
-                    userField.input, punishField.input, clearOneField.input, clearMemberField.input,
-                    withTextField2.input, withTextAndCopyField.input, withCopyField.input,
-                    moderatorNickField.input, formTemplateField.input
-                ];
-
-                allInputs.forEach(input => {
-                    input.addEventListener('change', () => {
-                        if (autoSaveToggle.toggle.getValue()) {
-                            saveButton.onclick();
-                        }
-                    }, { signal: autoSaveAbort.signal });
-                });
 
                 panel.appendChild(advancedSection.wrapper);
 
                 // Секция: Настройки команд (раскрывающаяся)
-                const commandSettingsSection = createCollapsibleSection("Настройки команд", "⚙️", false);
+                const commandSettingsSection = createCollapsibleSection("Настройки команд", false);
 
                 const defaultMuteTimeField = createInputField(
                     "Время мута по умолчанию (минуты):",
@@ -2130,11 +2117,11 @@ module.exports = (() => {
                 panel.appendChild(commandSettingsSection.wrapper);
 
                 // Секция: Настройки уведомлений (раскрывающаяся)
-                const notificationSettingsSection = createCollapsibleSection("Настройки уведомлений", "🔔", false);
+                const notificationSettingsSection = createCollapsibleSection("Настройки уведомлений", false);
 
                 const notificationTimeoutField = createInputField(
                     "Таймаут уведомлений (мс):",
-                    this.settings.notificationSettings?.timeout || 3000,
+                    normalizeNumber(this.settings.notificationSettings?.timeout, 3000, 1000, 10000),
                     "Время отображения уведомлений в миллисекундах"
                 );
                 notificationTimeoutField.input.type = "number";
@@ -2145,47 +2132,53 @@ module.exports = (() => {
                 const showSuccessToggle = createToggle(
                     "Показывать успешные уведомления",
                     this.settings.notificationSettings?.showSuccess !== false,
-                    "Показывать уведомления об успешных операциях"
+                    "Показывать уведомления об успешных операциях",
+                    triggerAutoSave
                 );
                 notificationSettingsSection.content.appendChild(showSuccessToggle.container);
 
                 const showErrorToggle = createToggle(
                     "Показывать ошибки",
                     this.settings.notificationSettings?.showError !== false,
-                    "Показывать уведомления об ошибках"
+                    "Показывать уведомления об ошибках",
+                    triggerAutoSave
                 );
                 notificationSettingsSection.content.appendChild(showErrorToggle.container);
 
                 const showInfoToggle = createToggle(
                     "Показывать информационные уведомления",
                     this.settings.notificationSettings?.showInfo !== false,
-                    "Показывать информационные уведомления"
+                    "Показывать информационные уведомления",
+                    triggerAutoSave
                 );
                 notificationSettingsSection.content.appendChild(showInfoToggle.container);
 
                 panel.appendChild(notificationSettingsSection.wrapper);
 
                 // Секция: Логирование (раскрывающаяся)
-                const loggingSection = createCollapsibleSection("Логирование", "📝", false);
+                const loggingSection = createCollapsibleSection("Логирование", false);
 
                 const loggingEnabledToggle = createToggle(
                     "Включить логирование",
                     this.settings.logging?.enabled === true,
-                    "Включить запись логов действий"
+                    "Включить запись логов действий",
+                    triggerAutoSave
                 );
                 loggingSection.content.appendChild(loggingEnabledToggle.container);
 
                 const logToConsoleToggle = createToggle(
                     "Логировать в консоль",
                     this.settings.logging?.logToConsole !== false,
-                    "Выводить логи в консоль браузера"
+                    "Выводить логи в консоль браузера",
+                    triggerAutoSave
                 );
                 loggingSection.content.appendChild(logToConsoleToggle.container);
 
                 const logToFileToggle = createToggle(
                     "Логировать в файл",
                     this.settings.logging?.logToFile === true,
-                    "Сохранять логи в файл"
+                    "Сохранять логи в файл",
+                    triggerAutoSave
                 );
                 loggingSection.content.appendChild(logToFileToggle.container);
 
@@ -2199,25 +2192,20 @@ module.exports = (() => {
                 panel.appendChild(loggingSection.wrapper);
 
                 // Секция: Интерфейс (раскрывающаяся)
-                const uiSection = createCollapsibleSection("Настройки интерфейса", "🎨", false);
+                const uiSection = createCollapsibleSection("Настройки интерфейса", false);
 
                 const compactModeToggle = createToggle(
                     "Компактный режим",
                     this.settings.ui?.compactMode === true,
-                    "Использовать компактный режим отображения"
+                    "Использовать компактный режим отображения",
+                    triggerAutoSave
                 );
                 uiSection.content.appendChild(compactModeToggle.container);
 
-                const showIconsToggle = createToggle(
-                    "Показывать иконки",
-                    this.settings.ui?.showIcons !== false,
-                    "Отображать иконки в меню и интерфейсе"
-                );
-                uiSection.content.appendChild(showIconsToggle.container);
 
                 const panelMaxWidthField = createInputField(
                     "Макс. ширина панели (px):",
-                    this.settings.ui?.panelMaxWidth || 800,
+                    normalizeNumber(uiRaw.panelMaxWidth, uiDefaults.panelMaxWidth, 420, 1400),
                     "Ширина панели настроек",
                     "800"
                 );
@@ -2228,7 +2216,7 @@ module.exports = (() => {
 
                 const baseFontSizeField = createInputField(
                     "Базовый размер шрифта (px):",
-                    this.settings.ui?.baseFontSize || 14,
+                    normalizeNumber(uiRaw.baseFontSize, uiDefaults.baseFontSize, 11, 20),
                     "Базовый размер текста в настройках",
                     "14"
                 );
@@ -2239,7 +2227,7 @@ module.exports = (() => {
 
                 const sectionSpacingField = createInputField(
                     "Отступы между секциями (px):",
-                    this.settings.ui?.sectionSpacing || 10,
+                    normalizeNumber(uiRaw.sectionSpacing, uiDefaults.sectionSpacing, 4, 24),
                     "Вертикальный отступ между секциями",
                     "10"
                 );
@@ -2250,7 +2238,7 @@ module.exports = (() => {
 
                 const sectionPaddingField = createInputField(
                     "Внутренние отступы секций (px):",
-                    this.settings.ui?.sectionPadding || 15,
+                    normalizeNumber(uiRaw.sectionPadding, uiDefaults.sectionPadding, 8, 30),
                     "Отступы внутри заголовка и содержимого секции",
                     "15"
                 );
@@ -2261,7 +2249,7 @@ module.exports = (() => {
 
                 const inputPaddingYField = createInputField(
                     "Отступы полей ввода по вертикали (px):",
-                    this.settings.ui?.inputPaddingY || 10,
+                    normalizeNumber(uiRaw.inputPaddingY, uiDefaults.inputPaddingY, 4, 18),
                     "Внутренние отступы сверху/снизу",
                     "10"
                 );
@@ -2272,7 +2260,7 @@ module.exports = (() => {
 
                 const inputPaddingXField = createInputField(
                     "Отступы полей ввода по горизонтали (px):",
-                    this.settings.ui?.inputPaddingX || 12,
+                    normalizeNumber(uiRaw.inputPaddingX, uiDefaults.inputPaddingX, 6, 24),
                     "Внутренние отступы слева/справа",
                     "12"
                 );
@@ -2283,7 +2271,7 @@ module.exports = (() => {
 
                 const borderRadiusField = createInputField(
                     "Скругление углов (px):",
-                    this.settings.ui?.borderRadius || 8,
+                    normalizeNumber(uiRaw.borderRadius, uiDefaults.borderRadius, 0, 20),
                     "Скругление секций и полей",
                     "8"
                 );
@@ -2294,7 +2282,7 @@ module.exports = (() => {
 
                 const accentColorField = createInputField(
                     "Цвет акцента (hex):",
-                    this.settings.ui?.accentColor || "#5865F2",
+                    normalizeColor(uiRaw.accentColor, uiDefaults.accentColor),
                     "Используется для кнопок и фокуса полей (hex/rgb/rgba)",
                     "#5865F2"
                 );
@@ -2302,7 +2290,7 @@ module.exports = (() => {
 
                 const panelBackgroundField = createInputField(
                     "Фон панели (hex/rgb/rgba):",
-                    this.settings.ui?.panelBackground || "#1F2024",
+                    normalizeColor(uiRaw.panelBackground, uiDefaults.panelBackground),
                     "Фон всей панели настроек",
                     "#1F2024"
                 );
@@ -2310,7 +2298,7 @@ module.exports = (() => {
 
                 const sectionBackgroundField = createInputField(
                     "Фон секций (hex/rgb/rgba):",
-                    this.settings.ui?.sectionBackground || "rgba(79, 84, 92, 0.3)",
+                    normalizeColor(uiRaw.sectionBackground, uiDefaults.sectionBackground),
                     "Фон заголовков и контента секций",
                     "rgba(79, 84, 92, 0.3)"
                 );
@@ -2318,7 +2306,7 @@ module.exports = (() => {
 
                 const sectionBorderColorField = createInputField(
                     "Цвет границ (hex/rgb/rgba):",
-                    this.settings.ui?.sectionBorderColor || "rgba(79, 84, 92, 0.5)",
+                    normalizeColor(uiRaw.sectionBorderColor, uiDefaults.sectionBorderColor),
                     "Цвет рамок секций и полей",
                     "rgba(79, 84, 92, 0.5)"
                 );
@@ -2326,7 +2314,7 @@ module.exports = (() => {
 
                 const inputBackgroundField = createInputField(
                     "Фон полей ввода (hex/rgb/rgba):",
-                    this.settings.ui?.inputBackground || "rgba(4, 4, 5, 0.3)",
+                    normalizeColor(uiRaw.inputBackground, uiDefaults.inputBackground),
                     "Фон input/textarea",
                     "rgba(4, 4, 5, 0.3)"
                 );
@@ -2334,7 +2322,7 @@ module.exports = (() => {
 
                 const textColorField = createInputField(
                     "Основной цвет текста (hex/rgb/rgba):",
-                    this.settings.ui?.textColor || "#FFFFFF",
+                    normalizeColor(uiRaw.textColor, uiDefaults.textColor),
                     "Цвет заголовков и кнопок",
                     "#FFFFFF"
                 );
@@ -2342,7 +2330,7 @@ module.exports = (() => {
 
                 const mutedTextColorField = createInputField(
                     "Приглушенный текст (hex/rgb/rgba):",
-                    this.settings.ui?.mutedTextColor || "#B9BBBE",
+                    normalizeColor(uiRaw.mutedTextColor, uiDefaults.mutedTextColor),
                     "Цвет подписей и второстепенного текста",
                     "#B9BBBE"
                 );
@@ -2350,7 +2338,7 @@ module.exports = (() => {
 
                 const hintTextColorField = createInputField(
                     "Цвет подсказок (hex/rgb/rgba):",
-                    this.settings.ui?.hintTextColor || "#72767D",
+                    normalizeColor(uiRaw.hintTextColor, uiDefaults.hintTextColor),
                     "Цвет мелких подсказок",
                     "#72767D"
                 );
@@ -2358,7 +2346,7 @@ module.exports = (() => {
 
                 const animationSpeedField = createInputField(
                     "Скорость анимаций (fast/normal/slow):",
-                    this.settings.ui?.animationSpeed || "normal",
+                    normalizeAnimationSpeed(uiRaw.animationSpeed),
                     "Скорость анимаций интерфейса",
                     "normal"
                 );
@@ -2375,7 +2363,7 @@ module.exports = (() => {
                 buttonsContainer.style.borderTop = `1px solid ${sectionBorderColor}`;
 
                 const saveButton = document.createElement("button");
-                saveButton.textContent = withIcon("💾", "Сохранить настройки");
+                saveButton.textContent = "Сохранить настройки";
                 saveButton.style.padding = compactMode ? "10px 18px" : "12px 24px";
                 saveButton.style.background = accentColor;
                 saveButton.style.color = textColor;
@@ -2447,12 +2435,12 @@ module.exports = (() => {
 
                         // Сохраняем настройки команд
                         if (!this.settings.commandSettings) this.settings.commandSettings = {};
-                        this.settings.commandSettings.defaultMuteTime = parseInt(defaultMuteTimeField.input.value) || 90;
-                        this.settings.commandSettings.defaultBanTime = parseInt(defaultBanTimeField.input.value) || 7;
+                        this.settings.commandSettings.defaultMuteTime = normalizeNumber(defaultMuteTimeField.input.value, 90, 1);
+                        this.settings.commandSettings.defaultBanTime = normalizeNumber(defaultBanTimeField.input.value, 7, 1);
 
                         // Сохраняем настройки уведомлений
                         if (!this.settings.notificationSettings) this.settings.notificationSettings = {};
-                        this.settings.notificationSettings.timeout = parseInt(notificationTimeoutField.input.value) || 3000;
+                        this.settings.notificationSettings.timeout = normalizeNumber(notificationTimeoutField.input.value, 3000, 1000, 10000);
                         this.settings.notificationSettings.showSuccess = showSuccessToggle.toggle.getValue();
                         this.settings.notificationSettings.showError = showErrorToggle.toggle.getValue();
                         this.settings.notificationSettings.showInfo = showInfoToggle.toggle.getValue();
@@ -2467,7 +2455,6 @@ module.exports = (() => {
                         // Сохраняем настройки интерфейса
                         if (!this.settings.ui) this.settings.ui = {};
                         this.settings.ui.compactMode = compactModeToggle.toggle.getValue();
-                        this.settings.ui.showIcons = showIconsToggle.toggle.getValue();
                         this.settings.ui.panelMaxWidth = normalizeNumber(panelMaxWidthField.input.value, uiDefaults.panelMaxWidth, 420, 1400);
                         this.settings.ui.baseFontSize = normalizeNumber(baseFontSizeField.input.value, uiDefaults.baseFontSize, 11, 20);
                         this.settings.ui.sectionSpacing = normalizeNumber(sectionSpacingField.input.value, uiDefaults.sectionSpacing, 4, 24);
@@ -2486,15 +2473,15 @@ module.exports = (() => {
                         this.settings.ui.animationSpeed = normalizeAnimationSpeed(animationSpeedField.input.value);
 
                         this.saveSettings(this.settings);
-                        this.showToast("✅ Настройки успешно сохранены!", "success");
+                        this.showToast("Настройки сохранены", "success");
                     } catch (error) {
                         Logger.error(PLUGIN_NAME, "Ошибка сохранения настроек:", error);
-                        this.showToast("❌ Ошибка сохранения: " + error.message, "error");
+                        this.showToast("Ошибка сохранения: " + error.message, "error");
                     }
                 };
 
                 const resetButton = document.createElement("button");
-                resetButton.textContent = withIcon("🔄", "Сбросить к умолчаниям");
+                resetButton.textContent = "Сбросить к умолчаниям";
                 resetButton.style.padding = compactMode ? "10px 18px" : "12px 24px";
                 resetButton.style.background = "#4E5058";
                 resetButton.style.color = textColor;
@@ -2526,37 +2513,52 @@ module.exports = (() => {
                                 // Снимаем листенеры автосохранения со старой панели
                                 panel._autoSaveAbort?.abort();
                                 this.settings = this.loadSettings();
-                                const newPanel = this.getSettingsPanel();
-                                panel.parentNode.replaceChild(newPanel, panel);
-                                this.showToast("⚙️ Настройки сброшены к умолчаниям", "info");
+                                // Кастомные правила берутся из конфига, который мы удалили,
+                                // иначе после сброса в меню остались бы старые категории.
+                                this.rules = this.loadCustomRules();
+                                // Панель могла быть уже снята из DOM — тогда заменять нечего.
+                                if (panel.parentNode) {
+                                    panel.parentNode.replaceChild(this.getSettingsPanel(), panel);
+                                }
+                                this.showToast("Настройки сброшены к умолчаниям", "info");
                             }
                         }
                     );
                 };
 
                 const openButton = document.createElement("button");
-                openButton.textContent = "📂 Открыть конфиг-файл";
-                openButton.style.padding = "12px 24px";
+                openButton.textContent = "Открыть конфиг-файл";
+                // Те же параметры интерфейса, что и у остальных кнопок:
+                // раньше здесь были зашиты свои отступы, цвет и шрифт.
+                openButton.style.padding = compactMode ? "10px 18px" : "12px 24px";
                 openButton.style.background = "#4E5058";
-                openButton.style.color = "white";
+                openButton.style.color = textColor;
                 openButton.style.border = "none";
                 openButton.style.borderRadius = "6px";
                 openButton.style.cursor = "pointer";
                 openButton.style.fontWeight = "600";
-                openButton.style.fontSize = "14px";
-                openButton.style.transition = "background 0.2s";
+                openButton.style.fontSize = `${labelFontSize}px`;
+                openButton.style.transition = `background ${animationMs}ms`;
                 openButton.onmouseenter = () => openButton.style.background = "#5D5F66";
                 openButton.onmouseleave = () => openButton.style.background = "#4E5058";
 
                 openButton.onclick = () => {
                     try {
                         require("electron").shell.openPath(this.configPath);
-                        this.showToast("📂 Открываю конфиг-файл...", "info");
+                        this.showToast("Открываю конфиг-файл", "info");
                     } catch (error) {
                         Logger.error(PLUGIN_NAME, "Ошибка открытия файла:", error);
-                        this.showToast("❌ Ошибка открытия файла: " + error.message, "error");
+                        this.showToast("Ошибка открытия файла: " + error.message, "error");
                     }
                 };
+
+                // Автосохранение подписывается на поля обходом готовой панели:
+                // ручной список раньше не покрывал числовые поля и настройки интерфейса.
+                const autoSaveAbort = new AbortController();
+                panel._autoSaveAbort = autoSaveAbort;
+                panel.querySelectorAll("input, textarea").forEach(input => {
+                    input.addEventListener("change", triggerAutoSave, { signal: autoSaveAbort.signal });
+                });
 
                 buttonsContainer.appendChild(saveButton);
                 buttonsContainer.appendChild(resetButton);

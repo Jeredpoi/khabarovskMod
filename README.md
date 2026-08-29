@@ -63,7 +63,7 @@ ZeresPluginLibrary больше не нужно.
 - **Категории наказаний** (punishmentsWithText / punishmentsWithTextAndCopy / punishmentsWithCopy)
 - **Настройки команд** (defaultMuteTime / defaultBanTime)
 - **Уведомления и логирование**
-- **Настройки интерфейса** (цвета, размеры, отступы, иконки)
+- **Настройки интерфейса** (цвета, размеры, отступы)
 
 ### Доступные переменные в формате сообщения:
 
@@ -130,7 +130,6 @@ ZeresPluginLibrary больше не нужно.
     },
     "ui": {
       "compactMode": false,
-      "showIcons": true,
       "accentColor": "#5865F2"
     }
   }
