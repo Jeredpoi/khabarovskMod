@@ -60,6 +60,7 @@ module.exports = (() => {
                 this.MessageActions = null;
                 this.ChannelStore = null;
                 this.SelectedChannelStore = null;
+                this.approveClickHandler = null;
                 this._ruleOptionsCache = null;
                 this.configPath = path.join(BdApi.Plugins.folder, "khabarovskMod.config.json");
                 this.settings = this.loadSettings();
@@ -156,6 +157,11 @@ module.exports = (() => {
             loadSettings() {
                 const defaultSettings = {
                     rulesChannelId: "",
+                    approveCopy: {
+                        enabled: true,
+                        channelId: "",
+                        labels: ["Одобрить"]
+                    },
                     messageFormats: {
                         withText: "<@{userId}> +{punishment} по пункту {ruleId} правил",
                         oralWarning: "<@{userId}>, прошу больше не нарушать правила сервера. {rulesChannel}",
@@ -297,7 +303,8 @@ module.exports = (() => {
                             logging: deepMerge(defaultSettings.logging || {}, loadedSettings.logging || {}),
                             permissions: deepMerge(defaultSettings.permissions || {}, loadedSettings.permissions || {}),
                             ui: deepMerge(defaultSettings.ui || {}, loadedSettings.ui || {}),
-                            advanced: deepMerge(defaultSettings.advanced || {}, loadedSettings.advanced || {})
+                            advanced: deepMerge(defaultSettings.advanced || {}, loadedSettings.advanced || {}),
+                            approveCopy: deepMerge(defaultSettings.approveCopy || {}, loadedSettings.approveCopy || {})
                         };
 
                         // Совместимость ключей очистки
@@ -364,6 +371,14 @@ module.exports = (() => {
                         settings: {
                             // ID канала с правилами: подставляется в {rulesChannel} как <#ID>.
                             rulesChannelId: String(settings.rulesChannelId || "").replace(/\D/g, ""),
+                            // Копирование команды при нажатии «Одобрить» в канале форм.
+                            approveCopy: {
+                                enabled: settings.approveCopy?.enabled !== false,
+                                channelId: String(settings.approveCopy?.channelId || "").replace(/\D/g, ""),
+                                labels: Array.isArray(settings.approveCopy?.labels) && settings.approveCopy.labels.length
+                                    ? settings.approveCopy.labels
+                                    : ["Одобрить"]
+                            },
                             messageFormats: {
                                 withText: settings.messageFormats?.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил",
                                 oralWarning: settings.messageFormats?.oralWarning || "<@{userId}>, прошу больше не нарушать правила сервера. {rulesChannel}",
@@ -570,6 +585,14 @@ module.exports = (() => {
                     });
                     this.messageMenuPatches.push(messageContextPatch);
 
+                    // Отдельный try: сбой копирования по «Одобрить» не должен
+                    // ронять остальной запуск плагина.
+                    try {
+                        this.registerApproveCopy();
+                    } catch (error) {
+                        Logger.error(PLUGIN_NAME, "registerApproveCopy failed", error);
+                    }
+
                     this.showToast("khabarovskMod запущен", "success");
                 } catch (error) {
                     Logger.error(PLUGIN_NAME, "khabarovskMod start error:", error);
@@ -588,7 +611,107 @@ module.exports = (() => {
                     });
                     this.messageMenuPatches = [];
                 }
+                if (this.approveClickHandler) {
+                    try {
+                        document.removeEventListener("click", this.approveClickHandler, true);
+                    } catch (error) {
+                        Logger.error(PLUGIN_NAME, "approve handler cleanup failed", error);
+                    }
+                    this.approveClickHandler = null;
+                }
                 this.showToast("khabarovskMod остановлен", "info");
+            }
+
+            /**
+             * Копирование команды при нажатии «Одобрить» в канале форм наказаний.
+             *
+             * Бот присылает embed с командой в блоке кода и кнопками Одобрить /
+             * Отказать. Слушаем клик в фазе перехвата, но НЕ отменяем его —
+             * нажатие уходит боту как обычно, мы лишь попутно забираем команду.
+             */
+            registerApproveCopy() {
+                if (this.approveClickHandler) {
+                    document.removeEventListener("click", this.approveClickHandler, true);
+                }
+
+                this.approveClickHandler = (event) => {
+                    try {
+                        const cfg = this.settings?.approveCopy || {};
+                        if (cfg.enabled === false) return;
+
+                        const button = event.target?.closest?.('button, [role="button"]');
+                        if (!button) return;
+
+                        const label = (button.textContent || "").trim().toLowerCase();
+                        const labels = Array.isArray(cfg.labels) && cfg.labels.length
+                            ? cfg.labels
+                            : ["Одобрить"];
+                        if (!labels.some(l => label === String(l).trim().toLowerCase())) return;
+
+                        // Ограничение по каналу, если ID задан в настройках.
+                        const wantChannel = String(cfg.channelId || "").replace(/\D/g, "");
+                        if (wantChannel) {
+                            const current = this.SelectedChannelStore?.getChannelId?.()
+                                || BdApi.Webpack.getModule(m => m?.getChannelId && m?.getLastSelectedChannelId)?.getChannelId?.();
+                            if (current && current !== wantChannel) return;
+                        }
+
+                        const command = this.extractCommandFromMessage(button);
+                        if (!command) return;
+
+                        this.copyToClipboard(command);
+                        this.showToast(`Команда скопирована: ${command}`, "success");
+                    } catch (error) {
+                        Logger.error(PLUGIN_NAME, "approve copy failed", error);
+                    }
+                };
+
+                document.addEventListener("click", this.approveClickHandler, true);
+            }
+
+            /** Ищет текст команды в блоке кода того же сообщения, что и кнопка. */
+            extractCommandFromMessage(button) {
+                // Поднимаемся до контейнера сообщения — у Discord это li списка чата.
+                const message = button.closest('li[id^="chat-messages-"]')
+                    || button.closest('[id^="chat-messages-"]')
+                    || button.closest('[class*="messageListItem"]')
+                    || button.closest('[class*="message_"]');
+                if (!message) return "";
+
+                const blocks = [...message.querySelectorAll("code, pre")];
+                if (!blocks.length) return "";
+
+                // Берём первый блок, похожий на слэш-команду.
+                for (const block of blocks) {
+                    const text = (block.textContent || "").replace(/\s+/g, " ").trim();
+                    if (text.startsWith("/")) return text;
+                }
+                return (blocks[0].textContent || "").replace(/\s+/g, " ").trim();
+            }
+
+            /** Копирование в буфер с запасным путём через execCommand. */
+            copyToClipboard(text) {
+                try {
+                    navigator.clipboard.writeText(text).catch(() => this.copyFallback(text));
+                } catch (_) {
+                    this.copyFallback(text);
+                }
+            }
+
+            copyFallback(text) {
+                const area = document.createElement("textarea");
+                area.value = text;
+                area.style.position = "fixed";
+                area.style.left = "-9999px";
+                document.body.appendChild(area);
+                area.select();
+                try {
+                    document.execCommand("copy");
+                } catch (error) {
+                    Logger.error(PLUGIN_NAME, "clipboard fallback failed", error);
+                } finally {
+                    area.remove();
+                }
             }
 
             getMessageFromProps(props) {
@@ -1666,6 +1789,83 @@ module.exports = (() => {
                     return { container, input: textarea };
                 };
 
+                // Функция создания переключателя (toggle)
+                const createToggle = (labelText, initialValue, hintText) => {
+                    let currentValue = initialValue;
+                    const container = document.createElement("div");
+                    container.style.marginBottom = `${sectionSpacing + 10}px`;
+                    container.style.display = "flex";
+                    container.style.alignItems = "center";
+                    container.style.justifyContent = "space-between";
+
+                    const labelContainer = document.createElement("div");
+                    labelContainer.style.flex = "1";
+
+                    const label = document.createElement("label");
+                    label.textContent = labelText;
+                    label.style.display = "block";
+                    label.style.marginBottom = "4px";
+                    label.style.color = mutedTextColor;
+                    label.style.fontSize = `${labelFontSize}px`;
+                    label.style.fontWeight = "500";
+                    label.style.cursor = "pointer";
+                    labelContainer.appendChild(label);
+
+                    if (hintText) {
+                        const hint = document.createElement("small");
+                        hint.textContent = hintText;
+                        hint.style.display = "block";
+                        hint.style.color = hintTextColor;
+                        hint.style.fontSize = `${hintFontSize}px`;
+                        labelContainer.appendChild(hint);
+                    }
+
+                    const toggleWidth = compactMode ? 38 : 44;
+                    const toggleHeight = compactMode ? 20 : 24;
+                    const toggleCircleSize = compactMode ? 14 : 18;
+                    const togglePadding = 3;
+                    const toggleOnLeft = toggleWidth - toggleCircleSize - togglePadding;
+
+                    const toggle = document.createElement("div");
+                    toggle.style.width = `${toggleWidth}px`;
+                    toggle.style.height = `${toggleHeight}px`;
+                    toggle.style.borderRadius = `${Math.floor(toggleHeight / 2)}px`;
+                    toggle.style.backgroundColor = currentValue ? accentColor : "#4E5058";
+                    toggle.style.position = "relative";
+                    toggle.style.cursor = "pointer";
+                    toggle.style.transition = `background ${animationMs}ms`;
+                    toggle.style.flexShrink = "0";
+
+                    const toggleCircle = document.createElement("div");
+                    toggleCircle.style.width = `${toggleCircleSize}px`;
+                    toggleCircle.style.height = `${toggleCircleSize}px`;
+                    toggleCircle.style.borderRadius = "50%";
+                    toggleCircle.style.backgroundColor = "#FFFFFF";
+                    toggleCircle.style.position = "absolute";
+                    toggleCircle.style.top = `${togglePadding}px`;
+                    toggleCircle.style.left = currentValue ? `${toggleOnLeft}px` : `${togglePadding}px`;
+                    toggleCircle.style.transition = `left ${animationMs}ms`;
+                    toggle.appendChild(toggleCircle);
+
+                    const updateToggle = (newValue) => {
+                        currentValue = newValue;
+                        toggle.style.backgroundColor = newValue ? accentColor : "#4E5058";
+                        toggleCircle.style.left = newValue ? `${toggleOnLeft}px` : `${togglePadding}px`;
+                    };
+
+                    toggle.onclick = () => updateToggle(!currentValue);
+                    label.onclick = () => toggle.onclick();
+
+                    // Метод для получения значения
+                    toggle.getValue = () => currentValue;
+                    toggle.setValue = (val) => updateToggle(val);
+
+                    container.appendChild(labelContainer);
+                    container.appendChild(toggle);
+
+                    return { container, toggle };
+                };
+
                 // Секция: Форматы сообщений (раскрывающаяся)
                 const formatsSection = createCollapsibleSection("Форматы сообщений", "💬", true);
 
@@ -1706,6 +1906,33 @@ module.exports = (() => {
                 formatsSection.content.appendChild(onlyMentionField.container);
 
                 panel.appendChild(formatsSection.wrapper);
+
+                // Секция: Канал форм наказаний (раскрывающаяся)
+                const approveSection = createCollapsibleSection("Канал форм наказаний", "\u2705", false);
+
+                const approveEnabledToggle = createToggle(
+                    "Копировать команду при «Одобрить»",
+                    this.settings.approveCopy?.enabled !== false,
+                    "При нажатии кнопки «Одобрить» команда из сообщения бота копируется в буфер. Само нажатие проходит как обычно."
+                );
+                approveSection.content.appendChild(approveEnabledToggle.container);
+
+                const approveChannelField = createInputField(
+                    "ID канала форм наказаний:",
+                    this.settings.approveCopy?.channelId || "",
+                    "ПКМ по каналу форм → «Копировать ID канала». Оставьте пустым, чтобы копировать в любом канале.",
+                    "1234567890123456789"
+                );
+                approveSection.content.appendChild(approveChannelField.container);
+
+                const approveLabelsField = createInputField(
+                    "Названия кнопок (через запятую):",
+                    (this.settings.approveCopy?.labels || ["Одобрить"]).join(", "),
+                    "Текст на кнопках, по которым срабатывает копирование."
+                );
+                approveSection.content.appendChild(approveLabelsField.container);
+
+                panel.appendChild(approveSection.wrapper);
 
                 // Секция: Форматы команд (раскрывающаяся)
                 const commandsSection = createCollapsibleSection("Форматы команд", "⚡", false);
@@ -1827,83 +2054,6 @@ module.exports = (() => {
                 // Секция: Дополнительные настройки (раскрывающаяся)
                 const advancedSection = createCollapsibleSection("Дополнительные настройки", "🔧", false);
 
-                // Функция создания переключателя (toggle)
-                const createToggle = (labelText, initialValue, hintText) => {
-                    let currentValue = initialValue;
-                    const container = document.createElement("div");
-                    container.style.marginBottom = `${sectionSpacing + 10}px`;
-                    container.style.display = "flex";
-                    container.style.alignItems = "center";
-                    container.style.justifyContent = "space-between";
-
-                    const labelContainer = document.createElement("div");
-                    labelContainer.style.flex = "1";
-
-                    const label = document.createElement("label");
-                    label.textContent = labelText;
-                    label.style.display = "block";
-                    label.style.marginBottom = "4px";
-                    label.style.color = mutedTextColor;
-                    label.style.fontSize = `${labelFontSize}px`;
-                    label.style.fontWeight = "500";
-                    label.style.cursor = "pointer";
-                    labelContainer.appendChild(label);
-
-                    if (hintText) {
-                        const hint = document.createElement("small");
-                        hint.textContent = hintText;
-                        hint.style.display = "block";
-                        hint.style.color = hintTextColor;
-                        hint.style.fontSize = `${hintFontSize}px`;
-                        labelContainer.appendChild(hint);
-                    }
-
-                    const toggleWidth = compactMode ? 38 : 44;
-                    const toggleHeight = compactMode ? 20 : 24;
-                    const toggleCircleSize = compactMode ? 14 : 18;
-                    const togglePadding = 3;
-                    const toggleOnLeft = toggleWidth - toggleCircleSize - togglePadding;
-
-                    const toggle = document.createElement("div");
-                    toggle.style.width = `${toggleWidth}px`;
-                    toggle.style.height = `${toggleHeight}px`;
-                    toggle.style.borderRadius = `${Math.floor(toggleHeight / 2)}px`;
-                    toggle.style.backgroundColor = currentValue ? accentColor : "#4E5058";
-                    toggle.style.position = "relative";
-                    toggle.style.cursor = "pointer";
-                    toggle.style.transition = `background ${animationMs}ms`;
-                    toggle.style.flexShrink = "0";
-
-                    const toggleCircle = document.createElement("div");
-                    toggleCircle.style.width = `${toggleCircleSize}px`;
-                    toggleCircle.style.height = `${toggleCircleSize}px`;
-                    toggleCircle.style.borderRadius = "50%";
-                    toggleCircle.style.backgroundColor = "#FFFFFF";
-                    toggleCircle.style.position = "absolute";
-                    toggleCircle.style.top = `${togglePadding}px`;
-                    toggleCircle.style.left = currentValue ? `${toggleOnLeft}px` : `${togglePadding}px`;
-                    toggleCircle.style.transition = `left ${animationMs}ms`;
-                    toggle.appendChild(toggleCircle);
-
-                    const updateToggle = (newValue) => {
-                        currentValue = newValue;
-                        toggle.style.backgroundColor = newValue ? accentColor : "#4E5058";
-                        toggleCircle.style.left = newValue ? `${toggleOnLeft}px` : `${togglePadding}px`;
-                    };
-
-                    toggle.onclick = () => updateToggle(!currentValue);
-                    label.onclick = () => toggle.onclick();
-
-                    // Метод для получения значения
-                    toggle.getValue = () => currentValue;
-                    toggle.setValue = (val) => updateToggle(val);
-
-                    container.appendChild(labelContainer);
-                    container.appendChild(toggle);
-
-                    return { container, toggle };
-                };
-
                 const showNotificationsToggle = createToggle(
                     "Показывать уведомления",
                     this.settings.showNotifications !== false,
@@ -1939,6 +2089,7 @@ module.exports = (() => {
                 const allInputs = [
                     withTextField.input, onlyMentionField.input,
                     oralWarningField.input, warningField.input, rulesChannelField.input,
+                    approveChannelField.input, approveLabelsField.input,
                     warnField.input, muteField.input, banField.input, permbanField.input,
                     userField.input, punishField.input, clearOneField.input, clearMemberField.input,
                     withTextField2.input, withTextAndCopyField.input, withCopyField.input,
@@ -2254,6 +2405,16 @@ module.exports = (() => {
                         this.settings.messageFormats.warning = warningField.input.value.trim();
                         // Из ссылки вида <#123> или #канал оставляем только цифры.
                         this.settings.rulesChannelId = rulesChannelField.input.value.replace(/\D/g, "");
+
+                        // Копирование команды при «Одобрить»
+                        if (!this.settings.approveCopy) this.settings.approveCopy = {};
+                        this.settings.approveCopy.enabled = approveEnabledToggle.toggle.getValue();
+                        this.settings.approveCopy.channelId = approveChannelField.input.value.replace(/\D/g, "");
+                        this.settings.approveCopy.labels = approveLabelsField.input.value
+                            .split(",").map(v => v.trim()).filter(Boolean);
+                        if (!this.settings.approveCopy.labels.length) {
+                            this.settings.approveCopy.labels = ["\u041e\u0434\u043e\u0431\u0440\u0438\u0442\u044c"];
+                        }
 
                         // Сохраняем команды
                         this.settings.messageFormats.commands.warn = warnField.input.value.trim();
