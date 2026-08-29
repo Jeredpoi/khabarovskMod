@@ -155,8 +155,11 @@ module.exports = (() => {
 
             loadSettings() {
                 const defaultSettings = {
+                    rulesChannelId: "",
                     messageFormats: {
                         withText: "<@{userId}> +{punishment} по пункту {ruleId} правил",
+                        oralWarning: "<@{userId}>, прошу больше не нарушать правила сервера. {rulesChannel}",
+                        warning: "<@{userId}>, здравствуйте, уважаемый пользователь. Выдаю вам предупреждение согласно пункту {ruleId} правил. {rulesChannel}",
                         commands: {
                             warn: "/warn user:<@{userId}> reason:{ruleId}",
                             mute: "/mute user:<@{userId}> time:90 reason:{ruleId}",
@@ -317,6 +320,7 @@ module.exports = (() => {
 
                         return {
                             ...mergedSettings,
+                            rulesChannelId: String(loadedSettings.rulesChannelId ?? defaultSettings.rulesChannelId ?? "").replace(/\D/g, ""),
                             _customRules: customRules
                         };
                     }
@@ -358,8 +362,12 @@ module.exports = (() => {
                     // Создаем красивую структурированную версию конфига с секциями
                     const configWithSections = {
                         settings: {
+                            // ID канала с правилами: подставляется в {rulesChannel} как <#ID>.
+                            rulesChannelId: String(settings.rulesChannelId || "").replace(/\D/g, ""),
                             messageFormats: {
                                 withText: settings.messageFormats?.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил",
+                                oralWarning: settings.messageFormats?.oralWarning || "<@{userId}>, прошу больше не нарушать правила сервера. {rulesChannel}",
+                                warning: settings.messageFormats?.warning || "<@{userId}>, здравствуйте, уважаемый пользователь. Выдаю вам предупреждение согласно пункту {ruleId} правил. {rulesChannel}",
                                 onlyMention: settings.messageFormats?.onlyMention || "<@{userId}>",
                                 commands: {
                                     warn: settings.messageFormats?.commands?.warn || "/warn user:<@{userId}> reason:{ruleId}",
@@ -632,13 +640,52 @@ module.exports = (() => {
                 return user.username || `ID${user.id || "0"}`;
             }
 
+            /**
+             * Упоминание канала правил для {rulesChannel}. Discord рисует <#ID>
+             * кликабельной ссылкой. Пустая строка, если ID не задан в настройках.
+             */
+            getRulesChannelMention() {
+                const id = String(this.settings?.rulesChannelId || "").replace(/\D/g, "");
+                return id ? `<#${id}>` : "";
+            }
+
+            /**
+             * Шаблон сообщения под конкретное наказание: у устного предупреждения
+             * и предупреждения свои формулировки, у остальных — общий withText.
+             */
+            getPunishmentMessageFormat(punishment) {
+                const formats = this.settings?.messageFormats || {};
+                const inList = (list) => Array.isArray(list) && list.includes(punishment);
+                if (inList(this.settings?.punishmentsWithText) && formats.oralWarning) {
+                    return formats.oralWarning;
+                }
+                if (inList(this.settings?.punishmentsWithTextAndCopy) && formats.warning) {
+                    return formats.warning;
+                }
+                return formats.withText;
+            }
+
             formatTemplate(template, variables = {}) {
                 if (typeof template !== "string" || !template) return "";
+                // rulesChannel доступен во всех шаблонах, но его можно перекрыть явно.
+                const vars = Object.prototype.hasOwnProperty.call(variables, "rulesChannel")
+                    ? variables
+                    : { ...variables, rulesChannel: this.getRulesChannelMention() };
                 return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
-                    if (!Object.prototype.hasOwnProperty.call(variables, key)) return match;
-                    const value = variables[key];
+                    if (!Object.prototype.hasOwnProperty.call(vars, key)) return match;
+                    const value = vars[key];
                     return value === undefined || value === null ? "" : String(value);
                 });
+            }
+
+            /**
+             * Собирает текст наказания. Если канал правил не задан, {rulesChannel}
+             * схлопывается в пустоту — подчищаем двойные пробелы и хвост строки.
+             */
+            buildPunishmentMessage(punishment, userId, ruleId) {
+                const template = this.getPunishmentMessageFormat(punishment);
+                const text = this.formatTemplate(template, { userId, punishment, ruleId });
+                return text.replace(/[ \t]{2,}/g, " ").trim();
             }
 
             removeDateEndLine(formText) {
@@ -1622,10 +1669,32 @@ module.exports = (() => {
                 // Секция: Форматы сообщений (раскрывающаяся)
                 const formatsSection = createCollapsibleSection("Форматы сообщений", "💬", true);
 
+                const rulesChannelField = createInputField(
+                    "ID канала с правилами:",
+                    this.settings.rulesChannelId || "",
+                    "ПКМ по каналу правил → «Копировать ID канала», вставьте сюда. Подставляется в {rulesChannel} как кликабельная ссылка. Оставьте пустым, чтобы не добавлять ссылку.",
+                    "1234567890123456789"
+                );
+                formatsSection.content.appendChild(rulesChannelField.container);
+
+                const oralWarningField = createInputField(
+                    "Текст устного предупреждения:",
+                    this.settings.messageFormats?.oralWarning || "<@{userId}>, прошу больше не нарушать правила сервера. {rulesChannel}",
+                    "Переменные: {userId}, {ruleId}, {punishment}, {rulesChannel}"
+                );
+                formatsSection.content.appendChild(oralWarningField.container);
+
+                const warningField = createInputField(
+                    "Текст предупреждения:",
+                    this.settings.messageFormats?.warning || "<@{userId}>, здравствуйте, уважаемый пользователь. Выдаю вам предупреждение согласно пункту {ruleId} правил. {rulesChannel}",
+                    "Переменные: {userId}, {ruleId}, {punishment}, {rulesChannel}"
+                );
+                formatsSection.content.appendChild(warningField.container);
+
                 const withTextField = createInputField(
-                    "Формат для автоотправки сообщений:",
+                    "Формат для остальных наказаний:",
                     this.settings.messageFormats?.withText || "<@{userId}> +{punishment} по пункту {ruleId} правил",
-                    "Доступные переменные: {userId}, {punishment}, {ruleId}"
+                    "Используется для наказаний вне списков устного и предупреждения. Переменные: {userId}, {punishment}, {ruleId}, {rulesChannel}"
                 );
                 formatsSection.content.appendChild(withTextField.container);
 
@@ -1869,6 +1938,7 @@ module.exports = (() => {
 
                 const allInputs = [
                     withTextField.input, onlyMentionField.input,
+                    oralWarningField.input, warningField.input, rulesChannelField.input,
                     warnField.input, muteField.input, banField.input, permbanField.input,
                     userField.input, punishField.input, clearOneField.input, clearMemberField.input,
                     withTextField2.input, withTextAndCopyField.input, withCopyField.input,
@@ -2180,6 +2250,10 @@ module.exports = (() => {
                         // Сохраняем форматы сообщений
                         this.settings.messageFormats.withText = withTextField.input.value.trim();
                         this.settings.messageFormats.onlyMention = onlyMentionField.input.value.trim();
+                        this.settings.messageFormats.oralWarning = oralWarningField.input.value.trim();
+                        this.settings.messageFormats.warning = warningField.input.value.trim();
+                        // Из ссылки вида <#123> или #канал оставляем только цифры.
+                        this.settings.rulesChannelId = rulesChannelField.input.value.replace(/\D/g, "");
 
                         // Сохраняем команды
                         this.settings.messageFormats.commands.warn = warnField.input.value.trim();
@@ -2392,11 +2466,7 @@ module.exports = (() => {
                         if (!channelId) return;
 
                         // Предупреждения - отправляем автоматически
-                        messageContent = this.formatTemplate(this.settings.messageFormats.withText, {
-                            userId: user.id,
-                            punishment,
-                            ruleId
-                        });
+                        messageContent = this.buildPunishmentMessage(punishment, user.id, ruleId);
 
                         this.queueActionWithPreview(
                             "Подтверждение наказания",
@@ -2426,11 +2496,7 @@ module.exports = (() => {
                         }
 
                         // Предупреждения - отправляем автоматически
-                        messageContent = this.formatTemplate(this.settings.messageFormats.withText, {
-                            userId: user.id,
-                            punishment,
-                            ruleId
-                        });
+                        messageContent = this.buildPunishmentMessage(punishment, user.id, ruleId);
 
                         commandContent = this.formatTemplate(this.settings.messageFormats.commands.warn, {
                             userId: user.id,
@@ -2507,11 +2573,7 @@ module.exports = (() => {
                         });
                     } else {
                         // Для остальных наказаний - копируем информацию в буфер
-                        messageContent = this.formatTemplate(this.settings.messageFormats.withText, {
-                            userId: user.id,
-                            ruleId,
-                            punishment
-                        });
+                        messageContent = this.buildPunishmentMessage(punishment, user.id, ruleId);
 
                         this.queueActionWithPreview(
                             "Подтверждение действия",
